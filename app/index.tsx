@@ -3,6 +3,15 @@ import { View, Text, StyleSheet, Image, Pressable, Platform } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+  interpolate,
+  Extrapolate,
+} from 'react-native-reanimated';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -15,6 +24,32 @@ export default function WelcomeScreen() {
   const setProfile = useDiaryStore((state) => state.setProfile);
   const initializeDefaultProfile = useDiaryStore((state) => state.initializeDefaultProfile);
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
+
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    translateY.value = withRepeat(
+      withTiming(-12, {
+        duration: 3000,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1, // Infinite loops
+      true // Reverse direction on repeat
+    );
+  }, []);
+
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  const animatedShadowStyle = useAnimatedStyle(() => {
+    const scale = interpolate(translateY.value, [-12, 0], [0.85, 1.0], Extrapolate.CLAMP);
+    const opacity = interpolate(translateY.value, [-12, 0], [0.04, 0.12], Extrapolate.CLAMP);
+    return {
+      transform: [{ scale }],
+      opacity,
+    };
+  });
 
   // Initialize default profile to detect device locale early
   useEffect(() => {
@@ -49,10 +84,9 @@ export default function WelcomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Ambient floating blobs */}
-      <View style={[styles.blob, styles.blobSage]} />
-      <View style={[styles.blob, styles.blobTerracotta]} />
-      <View style={[styles.blob, styles.blobGold]} />
+      {/* Ambient glassmorphic glowing spots */}
+      <View style={styles.glowSage} />
+      <View style={styles.glowPeach} />
 
       <View className="flex-1 px-8 justify-between pb-10 pt-4 relative z-10">
         {/* Header */}
@@ -63,45 +97,43 @@ export default function WelcomeScreen() {
             <Text className="font-outfit-bold text-2xl text-text-primary ml-2 mr-2">digest</Text>
           </View>
 
-          {/* Language segmented control */}
-          <View style={styles.langSelector}>
-            <Pressable
-              onPress={() => toggleLanguage('ar')}
-              style={[styles.langBtn, language === 'ar' && styles.langBtnActive]}
-            >
-              <Text style={[styles.langText, language === 'ar' && styles.langTextActive]}>عربي</Text>
+          {/* Language minimal switcher */}
+          <View className="flex-row items-center">
+            <Pressable onPress={() => toggleLanguage('ar')} className="px-1 py-2">
+              <Text className={`font-inter text-xs ${language === 'ar' ? 'font-outfit-bold text-text-primary' : 'text-text-muted opacity-50'}`}>
+                عربي
+              </Text>
             </Pressable>
-            <Pressable
-              onPress={() => toggleLanguage('en')}
-              style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
-            >
-              <Text style={[styles.langText, language === 'en' && styles.langTextActive]}>EN</Text>
+            <Text className="text-text-muted mx-2 text-xs opacity-30">•</Text>
+            <Pressable onPress={() => toggleLanguage('en')} className="px-1 py-2">
+              <Text className={`font-inter text-xs ${language === 'en' ? 'font-outfit-bold text-text-primary' : 'text-text-muted opacity-50'}`}>
+                EN
+              </Text>
             </Pressable>
           </View>
         </View>
 
-        {/* Hero Bento Card with Backlight Glow */}
-        <View style={styles.heroWrapper}>
-          {/* Backlight Glows */}
-          <View style={styles.glowMint} />
-          <View style={styles.glowTerracotta} />
-
-          {/* Translucent Bento Card */}
-          <View style={styles.bentoCard}>
+        {/* Floating Transparent Hero */}
+        <View style={styles.heroContainer}>
+          {/* Bobbing Image Wrapper */}
+          <Animated.View style={[styles.heroImageWrapper, animatedImageStyle]}>
             <Image
               source={images.welcomeHero}
               style={styles.heroImage}
               resizeMode="contain"
             />
-          </View>
+          </Animated.View>
+          
+          {/* Synchronized Volumetric Shadow */}
+          <Animated.View style={[styles.volumetricShadow, animatedShadowStyle]} />
         </View>
 
         {/* Value Proposition */}
-        <View style={[styles.textWrapper, isRtl && styles.rtlAlign]}>
-          <Text className="font-outfit-bold text-[40px] leading-[46px] text-text-primary tracking-tighter mb-4">
-            {t.titleLine1}{'\n'}/ <Text style={styles.italicText}>{t.titleLine2}</Text>
+        <View style={[styles.textWrapper, isRtl && styles.rtlAlign]} className="px-2 mt-4">
+          <Text className={`font-outfit-bold text-[48px] leading-[52px] text-text-primary tracking-tighter mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+            {t.titleLine1}{'\n'}/ <Text className="font-outfit-semibold italic text-accent-sage">{t.titleLine2}</Text>
           </Text>
-          <Text className="font-inter text-base text-text-muted leading-relaxed max-w-[320px]">
+          <Text className={`font-inter text-base text-text-muted leading-relaxed max-w-[280px] my-4 ${isRtl ? 'text-right' : 'text-left'}`}>
             {t.subtitle}
           </Text>
         </View>
@@ -110,7 +142,8 @@ export default function WelcomeScreen() {
         <View className="w-full">
           <PresstoButton
             onPress={() => router.push('/onboarding')}
-            className="bg-accent-sage rounded-full py-5 items-center justify-center shadow-sm"
+            style={styles.ctaButton}
+            className="bg-accent-sage rounded-full py-5 items-center justify-center"
           >
             <Text className="text-white font-outfit-bold text-base tracking-wide">
               {t.getStarted}
@@ -139,33 +172,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9F8',
   },
-  blob: {
+  glowSage: {
     position: 'absolute',
-    borderRadius: 999,
+    top: 50,
+    left: -100,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: '#E2ECD7',
+    opacity: 0.15,
+    ...Platform.select({
+      web: {
+        filter: 'blur(60px)',
+      } as any,
+    }),
   },
-  blobSage: {
-    top: 60,
-    left: -40,
-    width: 180,
-    height: 180,
-    backgroundColor: '#4C6E58',
-    opacity: 0.08,
-  },
-  blobTerracotta: {
-    top: '45%',
-    right: -60,
-    width: 220,
-    height: 220,
+  glowPeach: {
+    position: 'absolute',
+    top: '35%',
+    right: -100,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
     backgroundColor: '#E58C73',
-    opacity: 0.08,
-  },
-  blobGold: {
-    bottom: 80,
-    left: -30,
-    width: 160,
-    height: 160,
-    backgroundColor: '#D3B177',
     opacity: 0.1,
+    ...Platform.select({
+      web: {
+        filter: 'blur(60px)',
+      } as any,
+    }),
   },
   header: {
     flexDirection: 'row',
@@ -181,90 +216,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  langSelector: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(98, 106, 102, 0.06)',
-    padding: 3,
-    borderRadius: 99,
-    borderWidth: 1,
-    borderColor: 'rgba(98, 106, 102, 0.08)',
-  },
-  langBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 99,
-  },
-  langBtnActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#1A1E1C',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-  langText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#626A66',
-  },
-  langTextActive: {
-    color: '#1A1E1C',
-    fontWeight: '600',
-  },
-  heroWrapper: {
-    height: '35%',
+  heroContainer: {
+    height: '38%',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    marginVertical: 16,
+    marginVertical: 12,
   },
-  glowMint: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: '#E2ECD7',
-    opacity: 0.45,
-    transform: [{ translateX: -40 }, { translateY: -20 }],
-    ...Platform.select({
-      web: {
-        filter: 'blur(35px)',
-      } as any,
-    }),
-  },
-  glowTerracotta: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: '#E58C73',
-    opacity: 0.2,
-    transform: [{ translateX: 50 }, { translateY: 30 }],
-    ...Platform.select({
-      web: {
-        filter: 'blur(30px)',
-      } as any,
-    }),
-  },
-  bentoCard: {
+  heroImageWrapper: {
     width: '100%',
-    height: '100%',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.45)',
-    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+    height: '85%',
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'hidden',
-    shadowColor: '#4C6E58',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    zIndex: 2,
   },
   heroImage: {
-    width: '85%',
-    height: '85%',
+    width: '90%',
+    height: '100%',
+  },
+  volumetricShadow: {
+    position: 'absolute',
+    bottom: 0,
+    width: 140,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#000000',
+    zIndex: 1,
   },
   textWrapper: {
     marginTop: 8,
@@ -273,7 +250,12 @@ const styles = StyleSheet.create({
   rtlAlign: {
     alignItems: 'flex-end',
   },
-  italicText: {
-    fontStyle: 'italic',
+  ctaButton: {
+    borderRadius: 9999,
+    shadowColor: '#4C6E58',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 8,
   },
 });
