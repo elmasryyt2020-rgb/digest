@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -225,8 +225,12 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     backgroundColor: '#E2ECD7',
     opacity: 0.45,
-    filter: 'blur(35px)',
     transform: [{ translateX: -40 }, { translateY: -20 }],
+    ...Platform.select({
+      web: {
+        filter: 'blur(35px)',
+      } as any,
+    }),
   },
   glowTerracotta: {
     position: 'absolute',
@@ -235,8 +239,12 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     backgroundColor: '#E58C73',
     opacity: 0.2,
-    filter: 'blur(30px)',
     transform: [{ translateX: 50 }, { translateY: 30 }],
+    ...Platform.select({
+      web: {
+        filter: 'blur(30px)',
+      } as any,
+    }),
   },
   bentoCard: {
     width: '100%',
