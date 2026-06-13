@@ -16,6 +16,9 @@ export interface UserProfile {
   language: 'ar' | 'en';
   country: 'EG' | 'GB';
   onboarded?: boolean;
+  diet_type?: 'classic' | 'vegetarian' | 'vegan' | 'keto' | 'low_carb';
+  exclusions?: string[];
+  disliked_ingredients?: string[];
   
   // Targets (calculated dynamically but editable)
   target_calories: number;
@@ -176,6 +179,9 @@ export const useDiaryStore = create<DiaryState>()(
           language: activeLanguage,
           country: activeCountry,
           onboarded: false,
+          diet_type: 'classic',
+          exclusions: [],
+          disliked_ingredients: [],
         };
 
         const targets = calculateNutrientTargets(defaultRawProfile);

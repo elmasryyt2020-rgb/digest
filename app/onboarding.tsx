@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Localization from 'expo-localization';
 
 import { useDiaryStore, calculateNutrientTargets } from '@/store/useDiaryStore';
 import { PresstoButton } from '@/components/PresstoButton';
@@ -103,15 +104,15 @@ export default function OnboardingScreen() {
   const setProfile = useDiaryStore((state) => state.setProfile);
 
   // Form states
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
-  const [name, setName] = useState('');
-  const [country, setCountry] = useState<'EG' | 'GB'>('EG');
+  const [step, setStep] = useState<0 | 1 | 2 | 3>(0); // 0: Body Details, 1: Goals & Activity, 2: Diet & Preferences, 3: Calculations Loading
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [birthYear, setBirthYear] = useState('1998');
   const [height, setHeight] = useState('175');
   const [weight, setWeight] = useState('75');
   const [activity, setActivity] = useState<'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active'>('moderately_active');
   const [goal, setGoal] = useState<'lose_weight' | 'maintain_weight' | 'gain_weight'>('lose_weight');
+  const [dietType, setDietType] = useState<'classic' | 'vegetarian' | 'vegan' | 'keto' | 'low_carb'>('classic');
+  const [exclusions, setExclusions] = useState<string[]>([]);
 
   // Loading shim states for Step 3
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -139,7 +140,7 @@ export default function OnboardingScreen() {
     };
   }, [step]);
 
-  // Loading steps simulation
+  // Loading steps simulation & Auto-location check
   useEffect(() => {
     if (step === 3) {
       let currentProgress = 0;
@@ -148,15 +149,19 @@ export default function OnboardingScreen() {
         if (currentProgress >= 1) {
           clearInterval(interval);
           setLoadingProgress(1);
-          
-          // Save parameters to draft profile
+
+          // Get system locale to mock Country priority detection
+          const locales = Localization.getLocales();
+          const regionCode = locales[0]?.regionCode;
+          const detectedCountry = (regionCode === 'EG' || regionCode === 'GB' ? regionCode : 'EG') as 'EG' | 'GB';
+
           const currentYear = new Date().getFullYear();
           const ageVal = currentYear - (parseInt(birthYear) || 28);
           const weightVal = parseFloat(weight) || 75;
           const heightVal = parseFloat(height) || 175;
 
           const baseProfile = {
-            name: name.trim() || 'Guest',
+            name: 'Guest',
             gender,
             age: ageVal,
             weight_kg: weightVal,
@@ -164,8 +169,11 @@ export default function OnboardingScreen() {
             activity_level: activity,
             health_goal: goal,
             language: 'en' as const, // default English for funnel screen
-            country,
+            country: detectedCountry,
             onboarded: false, // will set to true on Clerk Signup completion
+            diet_type: dietType,
+            exclusions: exclusions,
+            disliked_ingredients: [],
           };
 
           const targets = calculateNutrientTargets(baseProfile);
@@ -181,9 +189,9 @@ export default function OnboardingScreen() {
           if (currentProgress < 0.35) {
             setLoadingText('Analyzing biometrics...');
           } else if (currentProgress < 0.70) {
-            setLoadingText('Computing BMR and metabolic rate...');
+            setLoadingText('Detecting country from IP...');
           } else {
-            setLoadingText('Selecting localized recipes...');
+            setLoadingText('Compiling custom meal plan...');
           }
         }
       }, 150);
@@ -199,12 +207,6 @@ export default function OnboardingScreen() {
 
   // Steps Navigation
   const handleStep0Next = () => {
-    if (name.trim().length >= 2) {
-      setStep(1);
-    }
-  };
-
-  const handleStep1Next = () => {
     const hVal = parseFloat(height);
     const wVal = parseFloat(weight);
     const yVal = parseInt(birthYear);
@@ -215,12 +217,24 @@ export default function OnboardingScreen() {
       wVal >= 30 && wVal <= 300 &&
       yVal >= 1900 && yVal <= currentYear
     ) {
-      setStep(2);
+      setStep(1);
     }
+  };
+
+  const handleStep1Next = () => {
+    setStep(2);
   };
 
   const handleStep2Next = () => {
     setStep(3);
+  };
+
+  const toggleExclusion = (id: string) => {
+    if (exclusions.includes(id)) {
+      setExclusions(exclusions.filter(e => e !== id));
+    } else {
+      setExclusions([...exclusions, id]);
+    }
   };
 
   return (
@@ -233,95 +247,17 @@ export default function OnboardingScreen() {
           <OnboardShell
             step={0}
             ctaLabel="Continue"
-            ctaDisabled={name.trim().length < 2}
             onNext={handleStep0Next}
           >
             <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
               <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
-                Step 1 of 3 · Identity
+                Step 1 of 3 · Body Details
               </Text>
               <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
-                Let's get to know <Text style={{ fontStyle: 'italic' }}>you</Text>.
-              </Text>
-              <Text className="font-inter text-sm text-text-muted leading-relaxed mb-8">
-                Your personalized targets will be customized based on your body biometrics and country location.
-              </Text>
-
-              {/* Name Input */}
-              <View className="mb-6">
-                <Text className="font-outfit-semibold text-xs text-text-primary mb-2">
-                  What is your name?
-                </Text>
-                <TextInput
-                  className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-base"
-                  placeholder="Enter your name..."
-                  placeholderTextColor="#9CA19E"
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                />
-              </View>
-
-              {/* Country preference */}
-              <View className="mb-6">
-                <Text className="font-outfit-semibold text-xs text-text-primary mb-2">
-                  Country of Residence (for localized recommendations)
-                </Text>
-                <View className="gap-3">
-                  <TouchableOpacity
-                    onPress={() => setCountry('EG')}
-                    className={`flex-row justify-between items-center p-4 border rounded-2xl bg-white ${
-                      country === 'EG' ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
-                    }`}
-                  >
-                    <View>
-                      <Text className={`text-sm font-inter-semibold ${country === 'EG' ? 'text-text-primary' : 'text-text-muted'}`}>
-                        Egypt (EG)
-                      </Text>
-                      <Text className="text-[10px] font-inter text-text-muted mt-0.5">
-                        Prioritize Middle Eastern and Egyptian recipes
-                      </Text>
-                    </View>
-                    {country === 'EG' && <Ionicons name="checkmark-circle" size={20} color="#4C6E58" />}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => setCountry('GB')}
-                    className={`flex-row justify-between items-center p-4 border rounded-2xl bg-white ${
-                      country === 'GB' ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
-                    }`}
-                  >
-                    <View>
-                      <Text className={`text-sm font-inter-semibold ${country === 'GB' ? 'text-text-primary' : 'text-text-muted'}`}>
-                        United Kingdom (GB)
-                      </Text>
-                      <Text className="text-[10px] font-inter text-text-muted mt-0.5">
-                        Prioritize Western and European recipes
-                      </Text>
-                    </View>
-                    {country === 'GB' && <Ionicons name="checkmark-circle" size={20} color="#4C6E58" />}
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
-          </OnboardShell>
-        )}
-
-        {step === 1 && (
-          <OnboardShell
-            step={1}
-            ctaLabel="Continue"
-            onNext={handleStep1Next}
-          >
-            <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-              <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
-                Step 2 of 3 · Biometrics
-              </Text>
-              <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
-                Your body details.
+                Tell us about <Text style={{ fontStyle: 'italic' }}>yourself</Text>.
               </Text>
               <Text className="font-inter text-sm text-text-muted leading-relaxed mb-6">
-                Your biometrics help calculate metabolic rates accurately using the Mifflin-St Jeor formula.
+                Your body details help calculate metabolic rates accurately using the Mifflin-St Jeor formula.
               </Text>
 
               {/* Gender selection */}
@@ -406,15 +342,15 @@ export default function OnboardingScreen() {
           </OnboardShell>
         )}
 
-        {step === 2 && (
+        {step === 1 && (
           <OnboardShell
-            step={2}
-            ctaLabel="Calculate plan"
-            onNext={handleStep2Next}
+            step={1}
+            ctaLabel="Continue"
+            onNext={handleStep1Next}
           >
             <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
               <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
-                Step 3 of 3 · Lifestyle
+                Step 2 of 3 · Goals & Activity
               </Text>
               <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
                 Daily activity & goals.
@@ -487,6 +423,90 @@ export default function OnboardingScreen() {
           </OnboardShell>
         )}
 
+        {step === 2 && (
+          <OnboardShell
+            step={2}
+            ctaLabel="Calculate plan"
+            onNext={handleStep2Next}
+          >
+            <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+              <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
+                Step 3 of 3 · Diet & Preferences
+              </Text>
+              <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
+                Diet type & exclusions.
+              </Text>
+              <Text className="font-inter text-sm text-text-muted leading-relaxed mb-6">
+                Personalize your diet profile and toggle any common ingredient exclusions.
+              </Text>
+
+              {/* Diet Type Grid */}
+              <View className="mb-6">
+                <Text className="font-outfit-semibold text-xs text-text-primary mb-2.5">
+                  Diet Type
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {[
+                    { id: 'classic', label: 'Classic / Anything' },
+                    { id: 'vegetarian', label: 'Vegetarian' },
+                    { id: 'vegan', label: 'Vegan' },
+                    { id: 'keto', label: 'Keto' },
+                    { id: 'low_carb', label: 'Low Carb' },
+                  ].map((diet) => (
+                    <TouchableOpacity
+                      key={diet.id}
+                      onPress={() => setDietType(diet.id as any)}
+                      style={{ width: '48%' }}
+                      className={`p-3.5 border rounded-2xl bg-white items-center justify-center ${
+                        dietType === diet.id ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                      }`}
+                    >
+                      <Text className={`text-xs text-center font-inter-medium ${dietType === diet.id ? 'text-text-primary font-inter-semibold' : 'text-text-muted'}`}>
+                        {diet.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Common Exclusions Grid */}
+              <View className="mb-6">
+                <Text className="font-outfit-semibold text-xs text-text-primary mb-2.5">
+                  Common Exclusions / Allergies
+                </Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {[
+                    { id: 'gluten-free', label: 'Gluten-Free' },
+                    { id: 'dairy-free', label: 'Dairy-Free' },
+                    { id: 'nut-free', label: 'Nut-Free' },
+                    { id: 'seafood-free', label: 'Seafood-Free' },
+                  ].map((excl) => {
+                    const isSelected = exclusions.includes(excl.id);
+                    return (
+                      <TouchableOpacity
+                        key={excl.id}
+                        onPress={() => toggleExclusion(excl.id)}
+                        className={`px-4 py-2.5 border rounded-full bg-white flex-row items-center gap-1.5 ${
+                          isSelected ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                        }`}
+                      >
+                        <Ionicons
+                          name={isSelected ? "checkmark-circle" : "add-circle-outline"}
+                          size={14}
+                          color={isSelected ? "#4C6E58" : "#626A66"}
+                        />
+                        <Text className={`text-xs font-inter-medium ${isSelected ? 'text-text-primary font-inter-semibold' : 'text-text-muted'}`}>
+                          {excl.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
+          </OnboardShell>
+        )}
+
         {step === 3 && (
           <OnboardShell
             step={3}
@@ -528,11 +548,11 @@ export default function OnboardingScreen() {
                     }}
                   />
                 </Animated.View>
-                
+
                 <Text className="font-outfit-bold text-base text-text-primary mb-3">
                   Creating Your Health Plan
                 </Text>
-                
+
                 {/* Horizontal Progress Bar */}
                 <View className="w-full h-2 bg-[#EAECEB] rounded-full overflow-hidden mb-4">
                   <View

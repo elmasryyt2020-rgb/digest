@@ -141,14 +141,7 @@ export default function DashboardScreen() {
               {t.subtitle}
             </Text>
           </View>
-          
-          {/* Settings Trigger */}
-          <PresstoButton 
-            onPress={() => router.push('/(tabs)/profile')}
-            className="w-11 h-11 rounded-full bg-white border border-border-muted justify-center items-center"
-          >
-            <Ionicons name="settings-outline" size={20} color="#1A1E1C" />
-          </PresstoButton>
+
         </View>
 
         {/* Daily vs. Weekly Toggle Segment */}

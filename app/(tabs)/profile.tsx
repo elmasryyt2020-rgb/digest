@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   StyleSheet,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,6 +32,8 @@ export default function ProfileScreen() {
   const [exporting, setExporting] = useState(false);
   const [exportSuccessUrl, setExportSuccessUrl] = useState<string | null>(null);
   const [showBiometrics, setShowBiometrics] = useState(true);
+  const [showDietaryModal, setShowDietaryModal] = useState(false);
+  const [newIngredient, setNewIngredient] = useState('');
 
   const language = profile?.language || 'ar';
   const isRtl = language === 'ar';
@@ -317,6 +320,25 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* Dietary Preferences Row */}
+        <TouchableOpacity
+          onPress={() => setShowDietaryModal(true)}
+          className={`flex-row justify-between items-center p-4 border border-border-muted rounded-3xl bg-white mb-5 shadow-sm ${isRtl ? 'flex-row-reverse' : ''}`}
+        >
+          <View className={`flex-row items-center flex-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <Ionicons name="nutrition-outline" size={20} color="#4C6E58" style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} />
+            <View className="flex-1">
+              <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? 'التفضيلات الغذائية' : 'Dietary Preferences'}
+              </Text>
+              <Text className={`font-inter text-[10px] text-text-muted mt-0.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? 'تعديل نوع الدايت، الأطعمة المستبعدة والمكونات المكروهة' : 'Edit diet type, exclusions, and disliked ingredients'}
+              </Text>
+            </View>
+          </View>
+          <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={20} color="#626A66" />
+        </TouchableOpacity>
+
         {/* Section 4: Application Configurations (Language, Country priority) */}
         <View className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.appSettings}</Text>
@@ -373,6 +395,200 @@ export default function ProfileScreen() {
         </View>
 
       </ScrollView>
+
+      {/* Dietary Preferences Modal */}
+      <Modal
+        visible={showDietaryModal}
+        animationType="slide"
+        onRequestClose={() => setShowDietaryModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+          {/* Modal Header */}
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <TouchableOpacity onPress={() => setShowDietaryModal(false)} className="p-1">
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+            </TouchableOpacity>
+            <Text className="text-base font-outfit-bold text-text-primary">
+              {isRtl ? 'التفضيلات الغذائية' : 'Dietary Preferences'}
+            </Text>
+            <View className="w-10" />
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            {/* Edit Name */}
+            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+              <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? 'الاسم الشخصي' : 'Profile Name'}
+              </Text>
+              <TextInput
+                className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                value={profile?.name || ''}
+                placeholder={isRtl ? 'أدخل اسمك...' : 'Enter your name...'}
+                onChangeText={(text) => handleStatChange('name', text)}
+              />
+            </View>
+
+            {/* Edit Country */}
+            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+              <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? 'الدولة ذات الأولوية' : 'Country Priority'}
+              </Text>
+              <View className={`flex-row bg-[#F0F2F0] p-1 rounded-xl ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <TouchableOpacity
+                  onPress={() => handleStatChange('country', 'EG')}
+                  className="flex-1 py-2.5 items-center rounded-lg"
+                  style={profile?.country === 'EG' ? styles.activeTab : null}
+                >
+                  <Text className={`text-xs font-outfit-medium ${profile?.country === 'EG' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
+                    {isRtl ? 'مصر (EG)' : 'Egypt (EG)'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleStatChange('country', 'GB')}
+                  className="flex-1 py-2.5 items-center rounded-lg"
+                  style={profile?.country === 'GB' ? styles.activeTab : null}
+                >
+                  <Text className={`text-xs font-outfit-medium ${profile?.country === 'GB' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
+                    {isRtl ? 'المملكة المتحدة (GB)' : 'United Kingdom (GB)'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Diet Type */}
+            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+              <Text className={`text-xs font-outfit-semibold text-text-primary mb-3.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? 'نوع الدايت' : 'Diet Type'}
+              </Text>
+              <View className="gap-2">
+                {[
+                  { id: 'classic', label_en: 'Classic / Anything', label_ar: 'تقليدي / كل شيء' },
+                  { id: 'vegetarian', label_en: 'Vegetarian', label_ar: 'نباتي (ألبان وخضار)' },
+                  { id: 'vegan', label_en: 'Vegan', label_ar: 'نباتي صرف' },
+                  { id: 'keto', label_en: 'Keto', label_ar: 'كيتو' },
+                  { id: 'low_carb', label_en: 'Low Carb', label_ar: 'قليل الكربوهيدرات' },
+                ].map((diet) => (
+                  <TouchableOpacity
+                    key={diet.id}
+                    onPress={() => handleStatChange('diet_type', diet.id)}
+                    className={`flex-row justify-between items-center p-3 border border-border-muted rounded-xl bg-white ${
+                      profile?.diet_type === diet.id ? 'border-accent-sage bg-[#F3F6F3]' : ''
+                    } ${isRtl ? 'flex-row-reverse' : ''}`}
+                  >
+                    <Text className={`text-xs font-inter-medium ${profile?.diet_type === diet.id ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
+                      {isRtl ? diet.label_ar : diet.label_en}
+                    </Text>
+                    {profile?.diet_type === diet.id && (
+                      <Ionicons name="checkmark" size={16} color="#4C6E58" />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* Common Exclusions */}
+            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+              <Text className={`text-xs font-outfit-semibold text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? 'الحساسية واستبعادات الشائعة' : 'Common Exclusions / Allergies'}
+              </Text>
+              <View className={`flex-row flex-wrap gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                {[
+                  { id: 'gluten-free', label_en: 'Gluten-Free', label_ar: 'خالي من الجلوتين' },
+                  { id: 'dairy-free', label_en: 'Dairy-Free', label_ar: 'خالي من الألبان' },
+                  { id: 'nut-free', label_en: 'Nut-Free', label_ar: 'خالي من المكسرات' },
+                  { id: 'seafood-free', label_en: 'Seafood-Free', label_ar: 'خالي من المأكولات البحرية' },
+                ].map((excl) => {
+                  const currentExclusions = profile?.exclusions || [];
+                  const isSelected = currentExclusions.includes(excl.id);
+                  return (
+                    <TouchableOpacity
+                      key={excl.id}
+                      onPress={() => {
+                        const newList = isSelected
+                          ? currentExclusions.filter((e) => e !== excl.id)
+                          : [...currentExclusions, excl.id];
+                        handleStatChange('exclusions', newList);
+                      }}
+                      className={`px-3 py-2 border rounded-full bg-white flex-row items-center gap-1 ${
+                        isSelected ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                      } ${isRtl ? 'flex-row-reverse' : ''}`}
+                    >
+                      <Ionicons
+                        name={isSelected ? "checkmark-circle" : "add-circle-outline"}
+                        size={12}
+                        color={isSelected ? "#4C6E58" : "#626A66"}
+                      />
+                      <Text className={`text-xs font-inter-medium ${isSelected ? 'text-text-primary font-inter-semibold' : 'text-text-muted'}`}>
+                        {isRtl ? excl.label_ar : excl.label_en}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* Custom Excluded Ingredients */}
+            <View className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm">
+              <Text className={`text-xs font-outfit-semibold text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl ? 'المكونات والأطعمة المستبعدة' : 'Disliked / Excluded Foods'}
+              </Text>
+              
+              {/* Add Custom Ingredient Input */}
+              <View className={`flex-row gap-2 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <TextInput
+                  className={`flex-1 bg-white border border-border-muted rounded-xl px-3 py-2 font-inter text-xs text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                  placeholder={isRtl ? 'مثال: خبز، أرز، سمك...' : 'e.g. Bread, Rice, Fish...'}
+                  placeholderTextColor="#9CA19E"
+                  value={newIngredient}
+                  onChangeText={setNewIngredient}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!newIngredient.trim()) return;
+                    const item = newIngredient.trim();
+                    const currentDislikes = profile?.disliked_ingredients || [];
+                    if (!currentDislikes.some(d => d.toLowerCase() === item.toLowerCase())) {
+                      handleStatChange('disliked_ingredients', [...currentDislikes, item]);
+                    }
+                    setNewIngredient('');
+                  }}
+                  className="bg-accent-sage px-4 rounded-xl justify-center items-center"
+                >
+                  <Text className="text-white text-xs font-outfit-bold">{isRtl ? 'إضافة' : 'Add'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Tags list */}
+              <View className={`flex-row flex-wrap gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                {(profile?.disliked_ingredients || []).map((item) => (
+                  <View
+                    key={item}
+                    className="flex-row items-center bg-[#9CA19E]/10 border border-[#9CA19E]/20 rounded-full px-3 py-1.5 gap-1.5"
+                  >
+                    <Text className="text-xs font-inter text-text-primary">{item}</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const currentDislikes = profile?.disliked_ingredients || [];
+                        const newList = currentDislikes.filter((d) => d !== item);
+                        handleStatChange('disliked_ingredients', newList);
+                      }}
+                      className="p-0.5"
+                    >
+                      <Ionicons name="close-circle" size={14} color="#626A66" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+
+                {(profile?.disliked_ingredients || []).length === 0 && (
+                  <Text className={`text-[10px] text-text-muted italic ${isRtl ? 'text-right w-full' : 'text-left w-full'}`}>
+                    {isRtl ? 'لا توجد أطعمة مستبعدة حالياً.' : 'No excluded foods currently.'}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
