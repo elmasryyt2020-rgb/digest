@@ -34,9 +34,8 @@ Use the following stack:
 - NativeWind / Tailwind CSS
 - Zustand for global state management
 - AsyncStorage for high-performance local persistence & trial caching
-- Clerk (`@clerk/clerk-expo`) for user authentication and session management
-- Supabase (Database, Edge Functions, Storage) for backend logic, database, and secure data storage
-- Gemini 3.5 Flash (via Supabase Edge Functions callouts) for AI meal parsing, vision scanning, and recipe building
+- Supabase (Auth, Database, Edge Functions, Storage) for user authentication, database tables, edge functions, and secure storage
+- Gemini (via Supabase Edge Functions callouts to Gemini 3.5 Flash) for food item identification, image bounding box detection, and recipe building
 - react-native-keyboard-controller for flawless input-keyboard alignment
 - pressto (built on react-native-reanimated + react-native-gesture-handler) for premium spring-based active motion
 - react-native-ease for smooth deceleration transitions
@@ -405,13 +404,25 @@ Use Supabase Edge Functions for:
 
 Never expose secrets in the frontend.
 
+### Vision Scanner Pipeline Rule:
+The AI Vision scanner uses Gemini 3.5 Flash solely to identify meal items and output coordinate bounding boxes. The client/edge then queries the `foods_cache` database (USDA / Open Food Facts cache) to retrieve precise, verified macro and micro nutrient profiles. Do not rely on the LLM to calculate raw nutritional numbers directly.
+
 ---
 
-## Clerk Auth Rules
+## Supabase Auth Rules
 
-Use Clerk for user authentication.
+Use Supabase Authentication (standard email/password sign-in/sign-up) for user management and secure session tokens.
 
-Do not build custom auth logic.
+Do not build custom auth logic. Banish Clerk authentication.
+
+### Sign-Up and Activation Flow:
+- Collect First Name, Last Name, Email Address, and Password.
+- Capitalize names before saving them.
+- Require users to verify their email address by entering a One-Time Password (OTP) code sent via email before activating the session and allowing diary additions.
+
+### Forgot Password Flow:
+- Send a verification OTP reset code to the user's email address.
+- Require OTP code verification to authenticate identity before allowing password updates.
 
 ---
 
@@ -456,7 +467,7 @@ Explain what changed and how to test.
 
 - Use Zustand for state
 - Use AsyncStorage for local trial persistence
-- Use Clerk for authentication
+- Use Supabase Authentication (email/password)
 - Use Supabase Edge Functions only for secure, secret-key backend operations
 - NativeWind tailwind css is preferred strictly for styling, adhering to exceptions where native layout styles require StyleSheet.
 
