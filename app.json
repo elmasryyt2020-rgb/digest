@@ -1,16 +1,18 @@
 {
   "expo": {
-    "name": "temp_init",
-    "slug": "temp_init",
+    "name": "Digest",
+    "slug": "digest",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "tempinit",
+    "scheme": "digest",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seif.digest"
     },
     "android": {
+      "package": "com.seif.digest",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,6 +39,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7ffd199b-45ff-4193-939a-b7a27fb073db"
+      }
+    },
+    "owner": "seif.ahmed"
   }
 }

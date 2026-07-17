@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+/ios
+/android
+
+# Design assets and screenshots (large files)
+Cronometer screenshots/
+Eat this much screenshots/
+UI inspo/
+scratch/
+.git/

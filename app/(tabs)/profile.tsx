@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,163 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Platform,
   Alert,
   StyleSheet,
   Modal,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, interpolateColor } from 'react-native-reanimated';
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { PresstoButton } from '@/components/PresstoButton';
+
+// Helper conversions for Ft/In and Cm
+const cmToFtIn = (cm: number) => {
+  const totalInches = cm / 2.54;
+  const ft = Math.floor(totalInches / 12);
+  const inches = Math.round(totalInches % 12);
+  return { ft: ft || 5, in: inches || 0 };
+};
+
+const ftInToCm = (ft: number, inches: number) => {
+  const totalInches = ft * 12 + inches;
+  return Math.round(totalInches * 2.54 * 10) / 10;
+};
+
+// Reusable animated Segmented Control Component
+interface SegmentedControlProps<T extends string> {
+  options: { value: T; label: string }[];
+  selectedValue: T;
+  onChange: (val: T) => void;
+  isRtl?: boolean;
+}
+
+function SegmentedControl<T extends string>({ options, selectedValue, onChange, isRtl }: SegmentedControlProps<T>) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const padding = 4;
+  const innerWidth = containerWidth > 0 ? containerWidth - padding * 2 : 0;
+  const itemWidth = innerWidth / options.length;
+
+  const orderedOptions = isRtl ? [...options].reverse() : options;
+  const activeIndex = orderedOptions.findIndex(o => o.value === selectedValue);
+  const translateX = useSharedValue(0);
+
+  useEffect(() => {
+    if (containerWidth > 0 && activeIndex !== -1) {
+      translateX.value = withSpring(activeIndex * itemWidth, { damping: 20, stiffness: 220 });
+    }
+  }, [activeIndex, containerWidth, itemWidth]);
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    return {
+      width: itemWidth,
+      transform: [{ translateX: translateX.value }],
+    };
+  });
+
+  return (
+    <View
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+      className="flex-row bg-[#F0F2F0] p-1 rounded-xl relative h-11 items-center"
+    >
+      {containerWidth > 0 && activeIndex !== -1 && (
+        <Animated.View
+          style={[
+            indicatorStyle,
+            {
+              position: 'absolute',
+              top: padding,
+              bottom: padding,
+              left: padding,
+              backgroundColor: '#FFFFFF',
+              borderRadius: 8,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.12,
+              shadowRadius: 1.5,
+              elevation: 2,
+            },
+          ]}
+        />
+      )}
+      {orderedOptions.map((opt) => (
+        <TouchableOpacity
+          key={opt.value}
+          onPress={() => onChange(opt.value)}
+          className="flex-1 items-center justify-center h-full z-10"
+          activeOpacity={0.7}
+        >
+          <Text
+            className={`text-[11px] font-outfit-medium ${
+              selectedValue === opt.value
+                ? 'text-text-primary font-outfit-bold'
+                : 'text-text-muted'
+            }`}
+          >
+            {opt.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+// Reusable animated Switch Toggle Component
+interface AnimatedSwitchProps {
+  value: boolean;
+  onValueChange: (val: boolean) => void;
+}
+
+function AnimatedSwitch({ value, onValueChange }: AnimatedSwitchProps) {
+  const translateX = useSharedValue(value ? 18 : 2);
+
+  useEffect(() => {
+    translateX.value = withSpring(value ? 18 : 2, { damping: 15, stiffness: 220 });
+  }, [value]);
+
+  const trackStyle = useAnimatedStyle(() => {
+    const backgroundColor = interpolateColor(
+      translateX.value,
+      [2, 18],
+      ['#EAECEB', '#4C6E58'] // border-muted to accent-sage
+    );
+    return { backgroundColor };
+  });
+
+  const thumbStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }],
+    };
+  });
+
+  return (
+    <Pressable
+      onPress={() => onValueChange(!value)}
+      className="w-10 h-6 rounded-full relative justify-center"
+      style={{ overflow: 'hidden' }}
+    >
+      <Animated.View style={[trackStyle, StyleSheet.absoluteFill]} />
+      <Animated.View
+        style={[
+          thumbStyle,
+          {
+            width: 20,
+            height: 20,
+            borderRadius: 10,
+            backgroundColor: '#FFFFFF',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.15,
+            shadowRadius: 1,
+            elevation: 2,
+          },
+        ]}
+      />
+    </Pressable>
+  );
+}
 
 export default function ProfileScreen() {
   // Zustand State
@@ -35,6 +182,24 @@ export default function ProfileScreen() {
   const [showDietaryModal, setShowDietaryModal] = useState(false);
   const [newIngredient, setNewIngredient] = useState('');
 
+  // Additional settings UI states
+  const [showMacroModal, setShowMacroModal] = useState(false);
+  const [macroPreset, setMacroPreset] = useState<'balanced' | 'high_protein' | 'keto' | 'custom'>('balanced');
+  const [macroCarbs, setMacroCarbs] = useState(40);
+  const [macroProtein, setMacroProtein] = useState(30);
+  const [macroFat, setMacroFat] = useState(30);
+
+  const [showFaqModal, setShowFaqModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Local Biometrics Form Texts to avoid roundtrip truncation
+  const [weightText, setWeightText] = useState('');
+  const [goalWeightText, setGoalWeightText] = useState('');
+  const [heightCm, setHeightCm] = useState('');
+  const [heightFt, setHeightFt] = useState('');
+  const [heightIn, setHeightIn] = useState('');
+  const [ageText, setAgeText] = useState('');
+
   const language = profile?.language || 'ar';
   const isRtl = language === 'ar';
 
@@ -45,8 +210,8 @@ export default function ProfileScreen() {
     male: isRtl ? 'ذكر' : 'Male',
     female: isRtl ? 'أنثى' : 'Female',
     age: isRtl ? 'العمر (بالسنوات)' : 'Age (years)',
-    weight: isRtl ? 'الوزن (كجم)' : 'Weight (kg)',
-    height: isRtl ? 'الطول (سم)' : 'Height (cm)',
+    weight: isRtl ? 'الوزن' : 'Weight',
+    height: isRtl ? 'الطول' : 'Height',
     activity: isRtl ? 'مستوى النشاط' : 'Activity Level',
     goal: isRtl ? 'الهدف الصحي' : 'Health Goal',
     appSettings: isRtl ? 'إعدادات التطبيق' : 'App Settings',
@@ -70,7 +235,77 @@ export default function ProfileScreen() {
     registerBtn: isRtl ? 'إنشاء حساب / تسجيل الدخول' : 'Sign Up / Sign In',
     signOutBtn: isRtl ? 'تسجيل الخروج' : 'Sign Out',
     activeUser: isRtl ? 'حساب نشط' : 'Premium Account',
+
+    // New keys
+    goalWeight: isRtl ? 'الوزن المستهدف' : 'Goal Weight',
+    adjustMacros: isRtl ? 'تعديل نسب المغذيات الكبرى' : 'Adjust Macro Ratios',
+    macroPresets: isRtl ? 'نسب المغذيات المقترحة' : 'Macro Presets',
+    balanced: isRtl ? 'متوازن' : 'Balanced',
+    highProtein: isRtl ? 'عالي البروتين' : 'High Protein',
+    keto: isRtl ? 'كيتو' : 'Keto',
+    custom: isRtl ? 'مخصص' : 'Custom',
+    carbsPercent: isRtl ? 'نسبة الكربوهيدرات' : 'Carbs Ratio',
+    proteinPercent: isRtl ? 'نسبة البروتين' : 'Protein Ratio',
+    fatsPercent: isRtl ? 'نسبة الدهون' : 'Fats Ratio',
+    save: isRtl ? 'حفظ' : 'Save',
+    macroValidationErr: isRtl ? 'يجب أن يكون مجموع النسب ١٠٠٪ تماماً.' : 'Percentages must sum to exactly 100%.',
+    unitPref: isRtl ? 'تفضيلات الوحدات' : 'Measurement Units',
+    weightUnit: isRtl ? 'وحدة الوزن' : 'Weight Unit',
+    heightUnit: isRtl ? 'وحدة الطول' : 'Height Unit',
+    waterUnit: isRtl ? 'وحدة الماء' : 'Water Unit',
+    reminders: isRtl ? 'التذكيرات والإشعارات' : 'Reminders & Notifications',
+    mealReminders: isRtl ? 'تذكيرات الوجبات اليومية' : 'Daily Meal Reminders',
+    waterReminders: isRtl ? 'تذكير شرب الماء' : 'Hydration Reminders',
+    workoutReminders: isRtl ? 'تذكير التمارين والأنشطة' : 'Activity Reminders',
+    helpFAQ: isRtl ? 'المساعدة والأسئلة الشائعة' : 'Help & FAQ',
+    privacyPolicy: isRtl ? 'سياسة الخصوصية' : 'Privacy Policy',
+    termsOfService: isRtl ? 'شروط الخدمة' : 'Terms of Service',
+    dangerZone: isRtl ? 'منطقة الخطر وإدارة الحساب' : 'Danger Zone & Account Management',
+    clearCache: isRtl ? 'مسح الذاكرة المؤقتة' : 'Clear Local Cache',
+    deleteAccount: isRtl ? 'حذف الحساب نهائياً' : 'Delete Account Permanently',
+    confirmClearCacheTitle: isRtl ? 'مسح الذاكرة المؤقتة' : 'Clear Local Cache',
+    confirmClearCacheMsg: isRtl ? 'هل أنت متأكد من مسح الذاكرة المؤقتة؟ سيتم حذف جميع السجلات والبيانات المحفوظة محلياً.' : 'Are you sure you want to clear local cache? This will delete all your offline logs and data.',
+    confirmDeleteAccountTitle: isRtl ? 'حذف الحساب نهائياً' : 'Delete Account Permanently',
+    confirmDeleteAccountMsg: isRtl ? 'هل أنت متأكد من حذف حسابك بشكل نهائي؟ هذا الإجراء لا يمكن التراجع عنه وسيتم محو تاريخك بالكامل.' : 'Are you sure you want to delete your account permanently? This action cannot be undone and will erase all your history.',
+    deleteBtn: isRtl ? 'حذف الحساب' : 'Delete Account',
+    cancel: isRtl ? 'إلغاء' : 'Cancel',
+    appTheme: isRtl ? 'مظهر التطبيق' : 'App Theme',
+    light: isRtl ? 'فاتح' : 'Light',
+    dark: isRtl ? 'داكن' : 'Dark',
+    system: isRtl ? 'تلقائي (النظام)' : 'System Default',
+    feet: isRtl ? 'قدم' : 'ft',
+    inches: isRtl ? 'بوصة' : 'in',
   };
+
+  // Sync profile data to local inputs
+  useEffect(() => {
+    if (profile) {
+      setAgeText(profile.age?.toString() || '');
+      
+      // Weight (convert for display if preferred unit is lbs)
+      if (profile.unit_weight === 'lbs') {
+        const lbs = Math.round(profile.weight_kg * 2.20462);
+        setWeightText(lbs.toString());
+      } else {
+        setWeightText(profile.weight_kg?.toString() || '');
+      }
+
+      // Goal Weight (convert for display if preferred unit is lbs)
+      const goalW = profile.goal_weight_kg ?? 70;
+      if (profile.unit_weight === 'lbs') {
+        const lbs = Math.round(goalW * 2.20462);
+        setGoalWeightText(lbs.toString());
+      } else {
+        setGoalWeightText(goalW.toString());
+      }
+
+      // Height
+      setHeightCm(profile.height_cm?.toString() || '');
+      const { ft, in: inches } = cmToFtIn(profile.height_cm || 178);
+      setHeightFt(ft.toString());
+      setHeightIn(inches.toString());
+    }
+  }, [profile?.weight_kg, profile?.height_cm, profile?.age, profile?.goal_weight_kg, profile?.unit_weight, profile?.unit_height]);
 
   const handleStatChange = (field: string, value: any) => {
     setProfile({ [field]: value });
@@ -78,7 +313,6 @@ export default function ProfileScreen() {
 
   const handleExportPDF = async () => {
     if (isTrial) {
-      // PDF export is a premium trigger, open Clerk signup bottom sheet
       triggerClerkSignUp();
       return;
     }
@@ -86,11 +320,31 @@ export default function ProfileScreen() {
     setExporting(true);
     setExportSuccessUrl(null);
 
-    // Simulate Deno PDF compilation lag
     setTimeout(() => {
       setExporting(false);
       setExportSuccessUrl('https://supabase.co/storage/v1/object/public/reports/digest_summary.pdf');
     }, 2000);
+  };
+
+  const getGoalText = () => {
+    const goal = profile?.health_goal || 'lose_weight';
+    if (isRtl) {
+      if (goal === 'lose_weight') return 'إنقاص الوزن';
+      if (goal === 'maintain_weight') return 'المحافظة على الوزن';
+      return 'زيادة الوزن';
+    } else {
+      if (goal === 'lose_weight') return 'Lose Weight';
+      if (goal === 'maintain_weight') return 'Maintain Weight';
+      return 'Gain Weight';
+    }
+  };
+
+  const getWeightText = () => {
+    const goalWeight = profile?.goal_weight_kg || 70;
+    if (profile?.unit_weight === 'lbs') {
+      return `${Math.round(goalWeight * 2.20462)} lbs`;
+    }
+    return `${goalWeight} kg`;
   };
 
   return (
@@ -104,37 +358,64 @@ export default function ProfileScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         
-        {/* Section 1: Account Status Card */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.account}</Text>
-          {isSignedIn && user ? (
-            <View className="items-center py-2">
-              <View className="flex-row items-center bg-accent-mint px-3 py-1.5 rounded-xl mb-3">
-                <Ionicons name="shield-checkmark" size={16} color="#4C6E58" style={{ marginRight: 4 }} />
-                <Text className="text-[10px] font-outfit-bold text-accent-sage">{t.activeUser}</Text>
-              </View>
-              <Text className="text-lg font-outfit-bold text-text-primary">{user.name}</Text>
-              <Text className="text-xs font-inter-medium text-text-muted mt-1">{user.email}</Text>
-              <TouchableOpacity onPress={signOut} className="mt-4 py-2 px-4 border border-nutrient-calories rounded-xl">
-                <Text className="color-nutrient-calories text-xs font-outfit-bold">{t.signOutBtn}</Text>
-              </TouchableOpacity>
+        {/* User Profile Header Card */}
+        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm items-center">
+          <View className="w-16 h-16 rounded-full bg-accent-sage/10 items-center justify-center border border-accent-sage/20 mb-3">
+            {isSignedIn && user ? (
+              <Text className="text-xl font-outfit-bold text-accent-sage">
+                {user.name ? user.name.slice(0, 2).toUpperCase() : 'US'}
+              </Text>
+            ) : (
+              <Ionicons name="person-outline" size={28} color="#4C6E58" />
+            )}
+          </View>
+          
+          <Text className="text-lg font-outfit-bold text-text-primary text-center">
+            {isSignedIn && user ? user.name : (isRtl ? 'زائر' : 'Guest')}
+          </Text>
+          <Text className="text-xs font-inter-medium text-text-muted mt-1 text-center">
+            {isSignedIn && user ? user.email : (isRtl ? 'سجل لحفظ بياناتك سحابياً' : 'Sign up to backup logs')}
+          </Text>
+
+          {/* Account Status Badge */}
+          <View className="mt-3 flex-row items-center">
+            <View className={`flex-row items-center px-3 py-1 rounded-full ${
+              isSignedIn ? 'bg-accent-mint border border-[#C3D9B6]' : 'bg-orange-50 border border-orange-200'
+            }`}>
+              <Ionicons 
+                name={isSignedIn ? "shield-checkmark" : "warning-outline"} 
+                size={12} 
+                color={isSignedIn ? "#4C6E58" : "#E58C73"} 
+                style={isRtl ? { marginLeft: 4 } : { marginRight: 4 }} 
+              />
+              <Text className={`text-[10px] font-outfit-bold ${
+                isSignedIn ? 'text-accent-sage' : 'text-nutrient-calories'
+              }`}>
+                {isSignedIn ? t.activeUser : t.trialMode}
+              </Text>
             </View>
-          ) : (
-            <View className={isRtl ? 'items-end' : 'items-start'}>
-              <Text className="text-sm font-outfit-bold text-nutrient-calories mb-1.5">{t.trialMode}</Text>
-              <Text className={`text-xs font-inter-regular text-text-muted leading-relaxed mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.trialMsg}</Text>
-              <PresstoButton
-                onPress={triggerClerkSignUp}
-                className="bg-accent-sage rounded-xl py-3 w-full items-center"
-              >
-                <Text className="text-white text-xs font-outfit-bold">{t.registerBtn}</Text>
-              </PresstoButton>
-            </View>
+          </View>
+
+          {/* Goal Caption Summary */}
+          <Text className="text-xs font-inter-regular text-text-muted mt-4 bg-bg-base px-4 py-2 rounded-xl text-center overflow-hidden">
+            {isRtl 
+              ? `الهدف: ${getGoalText()}  ·  الوزن المستهدف: ${getWeightText()}`
+              : `Goal: ${getGoalText()}  ·  Target Weight: ${getWeightText()}`
+            }
+          </Text>
+
+          {!isSignedIn && (
+            <PresstoButton
+              onPress={triggerClerkSignUp}
+              className="bg-accent-sage rounded-xl py-2.5 w-full items-center mt-4"
+            >
+              <Text className="text-white text-xs font-outfit-bold">{t.registerBtn}</Text>
+            </PresstoButton>
           )}
         </View>
 
         {/* PDF Export Panel - Styled in Mint/Sage Green System */}
-        <View className="bg-accent-mint rounded-3xl border border-[#C3D9B6] p-5 mb-5 shadow-sm">
+        <View className="bg-accent-mint rounded-3xl border border-[#C3D9B6] p-6 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-accent-sage mb-2.5 ${isRtl ? 'text-right' : 'text-left'}`}>
             {t.pdfTitle}
           </Text>
@@ -172,7 +453,7 @@ export default function ProfileScreen() {
         {/* Section 2: Dynamic Targets Summary Table */}
         <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.targetSummary}</Text>
-          <View className="space-y-3">
+          <View className="gap-y-3">
             <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Text className="text-xs font-outfit-semibold text-text-muted">{t.calories}</Text>
               <Text className="text-xs font-inter-bold text-text-primary">{profile?.target_calories || 2000} kcal</Text>
@@ -191,7 +472,12 @@ export default function ProfileScreen() {
             </View>
             <View className={`flex-row justify-between py-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Text className="text-xs font-outfit-semibold text-text-muted">{t.water}</Text>
-              <Text className="text-xs font-inter-bold text-text-primary">{profile?.target_water_ml || 2500} ml</Text>
+              <Text className="text-xs font-inter-bold text-text-primary">
+                {profile?.unit_water === 'fl_oz'
+                  ? `${Math.round((profile?.target_water_ml || 2500) * 0.033814)} fl oz`
+                  : `${profile?.target_water_ml || 2500} ml`
+                }
+              </Text>
             </View>
           </View>
         </View>
@@ -207,30 +493,19 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           {showBiometrics && (
-            <View className="space-y-4">
+            <View className="gap-y-4">
               {/* Gender */}
               <View>
                 <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.gender}</Text>
-                <View className={`flex-row bg-[#F0F2F0] p-1 rounded-xl ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <TouchableOpacity
-                    onPress={() => handleStatChange('gender', 'male')}
-                    className="flex-1 py-2.5 items-center rounded-lg"
-                    style={profile?.gender === 'male' ? styles.activeTab : null}
-                  >
-                    <Text className={`text-xs font-outfit-medium ${profile?.gender === 'male' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                      {t.male}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => handleStatChange('gender', 'female')}
-                    className="flex-1 py-2.5 items-center rounded-lg"
-                    style={profile?.gender === 'female' ? styles.activeTab : null}
-                  >
-                    <Text className={`text-xs font-outfit-medium ${profile?.gender === 'female' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                      {t.female}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                <SegmentedControl
+                  options={[
+                    { value: 'male', label: t.male },
+                    { value: 'female', label: t.female }
+                  ]}
+                  selectedValue={profile?.gender || 'male'}
+                  onChange={(val) => handleStatChange('gender', val)}
+                  isRtl={isRtl}
+                />
               </View>
 
               {/* Age */}
@@ -239,37 +514,113 @@ export default function ProfileScreen() {
                 <TextInput
                   className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                   keyboardType="numeric"
-                  value={profile?.age?.toString() || '25'}
-                  onChangeText={(text) => handleStatChange('age', parseInt(text) || 0)}
+                  value={ageText}
+                  onChangeText={(text) => {
+                    setAgeText(text);
+                    handleStatChange('age', parseInt(text) || 0);
+                  }}
                 />
               </View>
 
               {/* Weight */}
               <View>
-                <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.weight}</Text>
+                <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {profile?.unit_weight === 'lbs' ? (isRtl ? 'الوزن (رطل)' : 'Weight (lbs)') : (isRtl ? 'الوزن (كجم)' : 'Weight (kg)')}
+                </Text>
                 <TextInput
                   className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                   keyboardType="numeric"
-                  value={profile?.weight_kg?.toString() || '80'}
-                  onChangeText={(text) => handleStatChange('weight_kg', parseFloat(text) || 0)}
+                  value={weightText}
+                  onChangeText={(text) => {
+                    setWeightText(text);
+                    const val = parseFloat(text) || 0;
+                    if (profile?.unit_weight === 'lbs') {
+                      handleStatChange('weight_kg', Math.round((val / 2.20462) * 10) / 10);
+                    } else {
+                      handleStatChange('weight_kg', val);
+                    }
+                  }}
+                />
+              </View>
+
+              {/* Goal Weight */}
+              <View>
+                <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {profile?.unit_weight === 'lbs' ? (isRtl ? 'الوزن المستهدف (رطل)' : 'Goal Weight (lbs)') : (isRtl ? 'الوزن المستهدف (كجم)' : 'Goal Weight (kg)')}
+                </Text>
+                <TextInput
+                  className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                  keyboardType="numeric"
+                  value={goalWeightText}
+                  onChangeText={(text) => {
+                    setGoalWeightText(text);
+                    const val = parseFloat(text) || 0;
+                    if (profile?.unit_weight === 'lbs') {
+                      handleStatChange('goal_weight_kg', Math.round((val / 2.20462) * 10) / 10);
+                    } else {
+                      handleStatChange('goal_weight_kg', val);
+                    }
+                  }}
                 />
               </View>
 
               {/* Height */}
               <View>
-                <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.height}</Text>
-                <TextInput
-                  className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
-                  keyboardType="numeric"
-                  value={profile?.height_cm?.toString() || '178'}
-                  onChangeText={(text) => handleStatChange('height_cm', parseFloat(text) || 0)}
-                />
+                <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {profile?.unit_height === 'ft_in' ? (isRtl ? 'الطول (قدم/بوصة)' : 'Height (ft/in)') : (isRtl ? 'الطول (سم)' : 'Height (cm)')}
+                </Text>
+                {profile?.unit_height === 'ft_in' ? (
+                  <View className={`flex-row gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <View className="flex-1">
+                      <TextInput
+                        className="bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary text-center"
+                        keyboardType="numeric"
+                        value={heightFt}
+                        placeholder={t.feet}
+                        onChangeText={(text) => {
+                          setHeightFt(text);
+                          const ft = parseFloat(text) || 0;
+                          const inch = parseFloat(heightIn) || 0;
+                          const cm = ftInToCm(ft, inch);
+                          handleStatChange('height_cm', cm);
+                        }}
+                      />
+                      <Text className="text-[9px] text-text-muted text-center mt-1">{t.feet}</Text>
+                    </View>
+                    <View className="flex-1">
+                      <TextInput
+                        className="bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary text-center"
+                        keyboardType="numeric"
+                        value={heightIn}
+                        placeholder={t.inches}
+                        onChangeText={(text) => {
+                          setHeightIn(text);
+                          const ft = parseFloat(heightFt) || 0;
+                          const inch = parseFloat(text) || 0;
+                          const cm = ftInToCm(ft, inch);
+                          handleStatChange('height_cm', cm);
+                        }}
+                      />
+                      <Text className="text-[9px] text-text-muted text-center mt-1">{t.inches}</Text>
+                    </View>
+                  </View>
+                ) : (
+                  <TextInput
+                    className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                    keyboardType="numeric"
+                    value={heightCm}
+                    onChangeText={(text) => {
+                      setHeightCm(text);
+                      handleStatChange('height_cm', parseFloat(text) || 0);
+                    }}
+                  />
+                )}
               </View>
 
               {/* Activity Level */}
               <View>
                 <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.activity}</Text>
-                <View className="space-y-2">
+                <View className="gap-y-2">
                   {(['sedentary', 'lightly_active', 'moderately_active', 'very_active'] as const).map((level) => (
                     <TouchableOpacity
                       key={level}
@@ -295,7 +646,7 @@ export default function ProfileScreen() {
               {/* Health Goal */}
               <View>
                 <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.goal}</Text>
-                <View className="space-y-2">
+                <View className="gap-y-2">
                   {(['lose_weight', 'maintain_weight', 'gain_weight'] as const).map((goal) => (
                     <TouchableOpacity
                       key={goal}
@@ -339,58 +690,314 @@ export default function ProfileScreen() {
           <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={20} color="#626A66" />
         </TouchableOpacity>
 
+        {/* Adjust Macro Ratios Button Row */}
+        <TouchableOpacity
+          onPress={() => {
+            setMacroPreset(profile?.macro_preset || 'balanced');
+            setMacroCarbs(profile?.macro_carbs_pct ?? 40);
+            setMacroProtein(profile?.macro_protein_pct ?? 30);
+            setMacroFat(profile?.macro_fat_pct ?? 30);
+            setShowMacroModal(true);
+          }}
+          className={`flex-row justify-between items-center p-4 border border-border-muted rounded-3xl bg-white mb-5 shadow-sm ${isRtl ? 'flex-row-reverse' : ''}`}
+        >
+          <View className={`flex-row items-center flex-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <Ionicons name="pie-chart-outline" size={20} color="#4C6E58" style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} />
+            <View className="flex-1">
+              <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                {t.adjustMacros}
+              </Text>
+              <Text className={`font-inter text-[10px] text-text-muted mt-0.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {isRtl
+                  ? `الحصة الحالية: ${
+                      profile?.macro_preset === 'balanced' ? 'متوازن' :
+                      profile?.macro_preset === 'high_protein' ? 'عالي البروتين' :
+                      profile?.macro_preset === 'keto' ? 'كيتو' : 'مخصص'
+                    } (${profile?.macro_carbs_pct ?? 40}% ك، ${profile?.macro_protein_pct ?? 30}% ب، ${profile?.macro_fat_pct ?? 30}% د)`
+                  : `Current: ${
+                      profile?.macro_preset === 'balanced' ? 'Balanced' :
+                      profile?.macro_preset === 'high_protein' ? 'High Protein' :
+                      profile?.macro_preset === 'keto' ? 'Keto' : 'Custom'
+                    } (${profile?.macro_carbs_pct ?? 40}% C / ${profile?.macro_protein_pct ?? 30}% P / ${profile?.macro_fat_pct ?? 30}% F)`
+                }
+              </Text>
+            </View>
+          </View>
+          <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={20} color="#626A66" />
+        </TouchableOpacity>
+
+        {/* Section: Measurement Units */}
+        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+            {t.unitPref}
+          </Text>
+          <View className="gap-y-4">
+            {/* Weight Unit */}
+            <View className={`flex-row justify-between items-center w-full py-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Text className="text-xs font-outfit-semibold text-text-primary">{t.weightUnit}</Text>
+              <View className="w-32">
+                <SegmentedControl
+                  options={[
+                    { value: 'kg', label: 'kg' },
+                    { value: 'lbs', label: 'lbs' }
+                  ]}
+                  selectedValue={profile?.unit_weight || 'kg'}
+                  onChange={(val) => handleStatChange('unit_weight', val)}
+                  isRtl={isRtl}
+                />
+              </View>
+            </View>
+
+            {/* Height Unit */}
+            <View className={`flex-row justify-between items-center w-full py-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Text className="text-xs font-outfit-semibold text-text-primary">{t.heightUnit}</Text>
+              <View className="w-32">
+                <SegmentedControl
+                  options={[
+                    { value: 'cm', label: 'cm' },
+                    { value: 'ft_in', label: 'ft/in' }
+                  ]}
+                  selectedValue={profile?.unit_height || 'cm'}
+                  onChange={(val) => handleStatChange('unit_height', val)}
+                  isRtl={isRtl}
+                />
+              </View>
+            </View>
+
+            {/* Water Unit */}
+            <View className={`flex-row justify-between items-center w-full py-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Text className="text-xs font-outfit-semibold text-text-primary">{t.waterUnit}</Text>
+              <View className="w-32">
+                <SegmentedControl
+                  options={[
+                    { value: 'ml', label: 'ml' },
+                    { value: 'fl_oz', label: 'fl oz' }
+                  ]}
+                  selectedValue={profile?.unit_water || 'ml'}
+                  onChange={(val) => handleStatChange('unit_water', val)}
+                  isRtl={isRtl}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Section: Reminders & Notifications */}
+        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+            {t.reminders}
+          </Text>
+          <View className="gap-y-4">
+            {/* Meal Reminders */}
+            <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <View className={`flex-1 ${isRtl ? 'pl-4' : 'pr-4'}`}>
+                <Text className={`text-xs font-outfit-semibold text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t.mealReminders}
+                </Text>
+                <Text className={`text-[10px] text-text-muted mt-0.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {isRtl ? 'تنبيه لتسجيل الفطور والغداء والعشاء' : 'Remind me to log breakfast, lunch, and dinner'}
+                </Text>
+              </View>
+              <AnimatedSwitch
+                value={!!profile?.reminder_meals}
+                onValueChange={(val) => handleStatChange('reminder_meals', val)}
+              />
+            </View>
+
+            {/* Water Reminders */}
+            <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <View className={`flex-1 ${isRtl ? 'pl-4' : 'pr-4'}`}>
+                <Text className={`text-xs font-outfit-semibold text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t.waterReminders}
+                </Text>
+                <Text className={`text-[10px] text-text-muted mt-0.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {isRtl ? 'تنبيه شرب الماء للحفاظ على رطوبة جسمك' : 'Remind me to drink water throughout the day'}
+                </Text>
+              </View>
+              <AnimatedSwitch
+                value={!!profile?.reminder_water}
+                onValueChange={(val) => handleStatChange('reminder_water', val)}
+              />
+            </View>
+
+            {/* Workout Reminders */}
+            <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <View className={`flex-1 ${isRtl ? 'pl-4' : 'pr-4'}`}>
+                <Text className={`text-xs font-outfit-semibold text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t.workoutReminders}
+                </Text>
+                <Text className={`text-[10px] text-text-muted mt-0.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {isRtl ? 'تذكير بتسجيل أنشطتك الرياضية اليومية' : 'Remind me to log daily exercises and workouts'}
+                </Text>
+              </View>
+              <AnimatedSwitch
+                value={!!profile?.reminder_workout}
+                onValueChange={(val) => handleStatChange('reminder_workout', val)}
+              />
+            </View>
+          </View>
+        </View>
+
         {/* Section 4: Application Configurations (Language, Country priority) */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm">
+        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.appSettings}</Text>
 
           {/* Language Selection */}
           <View className="mb-4">
             <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.langOpt}</Text>
-            <View className={`flex-row bg-[#F0F2F0] p-1 rounded-xl ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <TouchableOpacity
-                onPress={() => handleStatChange('language', 'ar')}
-                className="flex-1 py-2.5 items-center rounded-lg"
-                style={profile?.language === 'ar' ? styles.activeTab : null}
-              >
-                <Text className={`text-xs font-outfit-medium ${profile?.language === 'ar' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                  العربية
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handleStatChange('language', 'en')}
-                className="flex-1 py-2.5 items-center rounded-lg"
-                style={profile?.language === 'en' ? styles.activeTab : null}
-              >
-                <Text className={`text-xs font-outfit-medium ${profile?.language === 'en' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                  English
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <SegmentedControl
+              options={[
+                { value: 'ar', label: 'العربية' },
+                { value: 'en', label: 'English' }
+              ]}
+              selectedValue={profile?.language || 'ar'}
+              onChange={(val) => handleStatChange('language', val)}
+              isRtl={isRtl}
+            />
           </View>
 
           {/* Country Selection */}
-          <View>
+          <View className="mb-4">
             <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.countryOpt}</Text>
-            <View className={`flex-row bg-[#F0F2F0] p-1 rounded-xl ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <TouchableOpacity
-                onPress={() => handleStatChange('country', 'EG')}
-                className="flex-1 py-2.5 items-center rounded-lg"
-                style={profile?.country === 'EG' ? styles.activeTab : null}
-              >
-                <Text className={`text-xs font-outfit-medium ${profile?.country === 'EG' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                  Egypt (مصر)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handleStatChange('country', 'GB')}
-                className="flex-1 py-2.5 items-center rounded-lg"
-                style={profile?.country === 'GB' ? styles.activeTab : null}
-              >
-                <Text className={`text-xs font-outfit-medium ${profile?.country === 'GB' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                  UK (الملكة المتحدة)
-                </Text>
-              </TouchableOpacity>
+            <SegmentedControl
+              options={[
+                { value: 'EG', label: 'Egypt (مصر)' },
+                { value: 'GB', label: 'UK (الملكة المتحدة)' }
+              ]}
+              selectedValue={profile?.country || 'EG'}
+              onChange={(val) => handleStatChange('country', val)}
+              isRtl={isRtl}
+            />
+          </View>
+
+          {/* App Theme Selection */}
+          <View>
+            <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.appTheme}</Text>
+            <SegmentedControl
+              options={[
+                { value: 'light', label: t.light },
+                { value: 'dark', label: t.dark },
+                { value: 'system', label: t.system }
+              ]}
+              selectedValue={profile?.app_theme || 'system'}
+              onChange={(val) => handleStatChange('app_theme', val)}
+              isRtl={isRtl}
+            />
+          </View>
+        </View>
+
+        {/* Support & Legal Card */}
+        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+            {isRtl ? 'المساعدة والبنود القانونية' : 'Help & Legal'}
+          </Text>
+          <View className="divide-y divide-[#F0F2F0]">
+            {/* Help & FAQ */}
+            <TouchableOpacity 
+              onPress={() => setShowFaqModal(true)} 
+              className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
+            >
+              <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Ionicons name="help-circle-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Text className="text-xs font-outfit-semibold text-text-primary">{t.helpFAQ}</Text>
+              </View>
+              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color="#9CA19E" />
+            </TouchableOpacity>
+
+            {/* Privacy Policy */}
+            <TouchableOpacity 
+              onPress={() => Alert.alert(isRtl ? 'سياسة الخصوصية' : 'Privacy Policy', isRtl ? 'سيتم فتح سياسة الخصوصية...' : 'Opening Privacy Policy...')} 
+              className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
+            >
+              <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Ionicons name="lock-closed-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Text className="text-xs font-outfit-semibold text-text-primary">{t.privacyPolicy}</Text>
+              </View>
+              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color="#9CA19E" />
+            </TouchableOpacity>
+
+            {/* Terms of Service */}
+            <TouchableOpacity 
+              onPress={() => Alert.alert(isRtl ? 'شروط الخدمة' : 'Terms of Service', isRtl ? 'سيتم فتح شروط الخدمة...' : 'Opening Terms of Service...')} 
+              className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
+            >
+              <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Ionicons name="document-text-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Text className="text-xs font-outfit-semibold text-text-primary">{t.termsOfService}</Text>
+              </View>
+              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color="#9CA19E" />
+            </TouchableOpacity>
+
+            {/* App Version */}
+            <View className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Ionicons name="information-circle-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Text className="text-xs font-outfit-semibold text-text-primary">{isRtl ? 'نسخة التطبيق' : 'App Version'}</Text>
+              </View>
+              <Text className="text-[10px] font-inter-semibold text-text-muted">v1.0.0 (Build 42)</Text>
             </View>
+          </View>
+        </View>
+
+        {/* Section: Danger Zone */}
+        <View className="bg-white rounded-3xl border border-red-100 p-5 mb-5 shadow-sm bg-red-50/10">
+          <Text className={`text-sm font-outfit-bold text-red-800 mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+            {t.dangerZone}
+          </Text>
+          <View className="gap-y-3">
+            {/* Clear Cache */}
+            <TouchableOpacity 
+              onPress={() => {
+                Alert.alert(
+                  t.confirmClearCacheTitle,
+                  t.confirmClearCacheMsg,
+                  [
+                    { text: t.cancel, style: 'cancel' },
+                    { 
+                      text: isRtl ? 'مسح' : 'Clear', 
+                      style: 'destructive', 
+                      onPress: () => {
+                        useDiaryStore.getState().resetAll();
+                        Alert.alert(isRtl ? 'تم المسح' : 'Cleared', isRtl ? 'تم مسح الذاكرة المؤقتة بنجاح.' : 'Local cache cleared successfully.');
+                      } 
+                    }
+                  ]
+                );
+              }}
+              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-white ${isRtl ? 'flex-row-reverse' : ''}`}
+            >
+              <Text className="text-xs font-outfit-semibold text-red-600">{t.clearCache}</Text>
+              <Ionicons name="trash-bin-outline" size={16} color="#DC2626" />
+            </TouchableOpacity>
+
+            {/* Delete Account */}
+            <TouchableOpacity 
+              onPress={() => setShowDeleteModal(true)}
+              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-white ${isRtl ? 'flex-row-reverse' : ''}`}
+            >
+              <Text className="text-xs font-outfit-semibold text-red-600">{t.deleteAccount}</Text>
+              <Ionicons name="person-remove-outline" size={16} color="#DC2626" />
+            </TouchableOpacity>
+
+            {/* Sign Out (Only if signed in) */}
+            {isSignedIn && (
+              <TouchableOpacity 
+                onPress={() => {
+                  Alert.alert(
+                    isRtl ? 'تسجيل الخروج' : 'Sign Out',
+                    isRtl ? 'هل أنت متأكد من رغبتك في تسجيل الخروج؟' : 'Are you sure you want to sign out?',
+                    [
+                      { text: t.cancel, style: 'cancel' },
+                      { text: t.signOutBtn, style: 'destructive', onPress: signOut }
+                    ]
+                  );
+                }}
+                className={`flex-row justify-between items-center p-3.5 border border-border-muted rounded-xl bg-white ${isRtl ? 'flex-row-reverse' : ''}`}
+              >
+                <Text className="text-xs font-outfit-semibold text-text-primary">{t.signOutBtn}</Text>
+                <Ionicons name="log-out-outline" size={16} color="#1A1E1C" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -426,33 +1033,6 @@ export default function ProfileScreen() {
                 placeholder={isRtl ? 'أدخل اسمك...' : 'Enter your name...'}
                 onChangeText={(text) => handleStatChange('name', text)}
               />
-            </View>
-
-            {/* Edit Country */}
-            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-              <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
-                {isRtl ? 'الدولة ذات الأولوية' : 'Country Priority'}
-              </Text>
-              <View className={`flex-row bg-[#F0F2F0] p-1 rounded-xl ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <TouchableOpacity
-                  onPress={() => handleStatChange('country', 'EG')}
-                  className="flex-1 py-2.5 items-center rounded-lg"
-                  style={profile?.country === 'EG' ? styles.activeTab : null}
-                >
-                  <Text className={`text-xs font-outfit-medium ${profile?.country === 'EG' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                    {isRtl ? 'مصر (EG)' : 'Egypt (EG)'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => handleStatChange('country', 'GB')}
-                  className="flex-1 py-2.5 items-center rounded-lg"
-                  style={profile?.country === 'GB' ? styles.activeTab : null}
-                >
-                  <Text className={`text-xs font-outfit-medium ${profile?.country === 'GB' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
-                    {isRtl ? 'المملكة المتحدة (GB)' : 'United Kingdom (GB)'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
             </View>
 
             {/* Diet Type */}
@@ -589,17 +1169,272 @@ export default function ProfileScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Macro Adjuster Modal */}
+      <Modal
+        visible={showMacroModal}
+        animationType="slide"
+        onRequestClose={() => setShowMacroModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+          {/* Modal Header */}
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <TouchableOpacity onPress={() => setShowMacroModal(false)} className="p-1">
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+            </TouchableOpacity>
+            <Text className="text-base font-outfit-bold text-text-primary">{t.adjustMacros}</Text>
+            <View className="w-10" />
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            {/* Preset Selection */}
+            <View className="mb-5">
+              <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                {t.macroPresets}
+              </Text>
+              <SegmentedControl
+                options={[
+                  { value: 'balanced', label: t.balanced },
+                  { value: 'high_protein', label: t.highProtein },
+                  { value: 'keto', label: t.keto },
+                  { value: 'custom', label: t.custom }
+                ]}
+                selectedValue={macroPreset}
+                onChange={(val) => {
+                  setMacroPreset(val);
+                  if (val === 'balanced') {
+                    setMacroCarbs(40);
+                    setMacroProtein(30);
+                    setMacroFat(30);
+                  } else if (val === 'high_protein') {
+                    setMacroCarbs(30);
+                    setMacroProtein(40);
+                    setMacroFat(30);
+                  } else if (val === 'keto') {
+                    setMacroCarbs(10);
+                    setMacroProtein(30);
+                    setMacroFat(60);
+                  }
+                }}
+                isRtl={isRtl}
+              />
+            </View>
+
+            {/* Macro Inputs */}
+            <View className="gap-y-4 mb-6">
+              {/* Carbs */}
+              <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Text className="text-xs font-outfit-semibold text-text-muted">{t.carbsPercent}</Text>
+                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-white px-2">
+                  <TextInput
+                    className="flex-1 py-2 font-inter text-sm text-text-primary text-center"
+                    keyboardType="numeric"
+                    value={macroCarbs.toString()}
+                    editable={macroPreset === 'custom'}
+                    onChangeText={(text) => {
+                      const val = parseInt(text) || 0;
+                      setMacroCarbs(val);
+                    }}
+                  />
+                  <Text className="text-xs font-inter text-text-muted">%</Text>
+                </View>
+              </View>
+
+              {/* Protein */}
+              <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Text className="text-xs font-outfit-semibold text-text-muted">{t.proteinPercent}</Text>
+                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-white px-2">
+                  <TextInput
+                    className="flex-1 py-2 font-inter text-sm text-text-primary text-center"
+                    keyboardType="numeric"
+                    value={macroProtein.toString()}
+                    editable={macroPreset === 'custom'}
+                    onChangeText={(text) => {
+                      const val = parseInt(text) || 0;
+                      setMacroProtein(val);
+                    }}
+                  />
+                  <Text className="text-xs font-inter text-text-muted">%</Text>
+                </View>
+              </View>
+
+              {/* Fats */}
+              <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Text className="text-xs font-outfit-semibold text-text-muted">{t.fatsPercent}</Text>
+                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-white px-2">
+                  <TextInput
+                    className="flex-1 py-2 font-inter text-sm text-text-primary text-center"
+                    keyboardType="numeric"
+                    value={macroFat.toString()}
+                    editable={macroPreset === 'custom'}
+                    onChangeText={(text) => {
+                      const val = parseInt(text) || 0;
+                      setMacroFat(val);
+                    }}
+                  />
+                  <Text className="text-xs font-inter text-text-muted">%</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Validation Info */}
+            <View className="mb-6 p-4 rounded-2xl bg-bg-base border border-border-muted">
+              <View className={`flex-row justify-between items-center mb-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Text className="text-xs font-outfit-semibold text-text-primary">
+                  {isRtl ? 'مجموع النسب اليومي' : 'Total Percentage'}
+                </Text>
+                <Text className={`text-sm font-inter-bold ${
+                  macroCarbs + macroProtein + macroFat === 100 ? 'text-accent-sage' : 'text-nutrient-calories'
+                }`}>
+                  {macroCarbs + macroProtein + macroFat}% / 100%
+                </Text>
+              </View>
+              {macroCarbs + macroProtein + macroFat !== 100 && (
+                <Text className={`text-[10px] text-nutrient-calories font-inter-medium ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t.macroValidationErr}
+                </Text>
+              )}
+            </View>
+
+            {/* Modal Actions */}
+            <View className="gap-y-2">
+              <TouchableOpacity
+                onPress={() => {
+                  const sum = macroCarbs + macroProtein + macroFat;
+                  if (sum !== 100) {
+                    Alert.alert(isRtl ? 'خطأ في التحقق' : 'Validation Error', t.macroValidationErr);
+                    return;
+                  }
+                  
+                  handleStatChange('macro_preset', macroPreset);
+                  handleStatChange('macro_carbs_pct', macroCarbs);
+                  handleStatChange('macro_protein_pct', macroProtein);
+                  handleStatChange('macro_fat_pct', macroFat);
+                  
+                  setShowMacroModal(false);
+                  Alert.alert(isRtl ? 'تم الحفظ' : 'Saved', isRtl ? 'تم تحديث نسب المغذيات الكبرى بنجاح.' : 'Macronutrient ratios updated successfully.');
+                }}
+                disabled={macroCarbs + macroProtein + macroFat !== 100}
+                className={`rounded-xl py-3 items-center justify-center ${
+                  macroCarbs + macroProtein + macroFat === 100 ? 'bg-accent-sage' : 'bg-accent-sage/40'
+                }`}
+              >
+                <Text className="text-white text-xs font-outfit-bold">{t.save}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowMacroModal(false)}
+                className="bg-bg-base border border-border-muted rounded-xl py-3 items-center justify-center"
+              >
+                <Text className="text-text-primary text-xs font-outfit-bold">{t.cancel}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* FAQ Modal */}
+      <Modal
+        visible={showFaqModal}
+        animationType="slide"
+        onRequestClose={() => setShowFaqModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+          {/* Modal Header */}
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <TouchableOpacity onPress={() => setShowFaqModal(false)} className="p-1">
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+            </TouchableOpacity>
+            <Text className="text-base font-outfit-bold text-text-primary">{t.helpFAQ}</Text>
+            <View className="w-10" />
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+            <View className="gap-y-4">
+              {[
+                {
+                  q_en: "How is my daily calorie target calculated?",
+                  q_ar: "كيف يتم حساب السعرات الحرارية اليومية المستهدفة؟",
+                  a_en: "We use the Mifflin-St Jeor equation to estimate your Resting Metabolic Rate (BMR), then multiply it by your activity factor. Your health goal (e.g. lose weight) subtracts or adds calories to compute the final target.",
+                  a_ar: "نستخدم معادلة ميفلين-سانت جيور لتقدير معدل الأيض الأساسي (BMR)، ثم نضربه في عامل النشاط البدني. يطرح هدفك الصحي (مثل إنقاص الوزن) أو يضيف سعرات حرارية لحساب الهدف النهائي."
+                },
+                {
+                  q_en: "What are macronutrient ratios?",
+                  q_ar: "ما هي نسب المغذيات الكبرى؟",
+                  a_en: "Macronutrients are Carbs, Protein, and Fats. Adjusting their ratios changes how your daily calories are distributed. A balanced profile is 40% Carbs, 30% Protein, and 30% Fats.",
+                  a_ar: "المغذيات الكبرى هي الكربوهيدرات والبروتينات والدهون. يؤدي ضبط نسبها إلى تغيير كيفية توزيع السعرات الحرارية اليومية. النسب المتوازنة هي ٤٠٪ كربوهيدرات، ٣٠٪ بروتين، ٣٠٪ دهون."
+                },
+                {
+                  q_en: "How does the water tracker work?",
+                  q_ar: "كيف يعمل متتبع شرب الماء؟",
+                  a_en: "Your baseline water target is calculated at 35ml per kg of body weight. You can log water in milliliters or fluid ounces, depending on your preferred unit preference.",
+                  a_ar: "يتم حساب هدفك المائي الأساسي عند ٣٥ مل لكل كجم من وزن الجسم. يمكنك تسجيل استهلاك المياه بالملليلتر أو الأوقية السائلة، حسب تفضيل الوحدة الخاص بك."
+                },
+                {
+                  q_en: "How are MET activity scores calculated?",
+                  q_ar: "كيف يتم حساب نقاط نشاط MET؟",
+                  a_en: "MET (Metabolic Equivalent of Task) scores estimate calorie burn. Calories burned = MET value × body weight (kg) × duration (hours). This ensures your workouts accurately reflect actual energy expenditure.",
+                  a_ar: "تقدّر نقاط مكافئ الأيض للمهمة (MET) حرق السعرات الحرارية. السعرات الحرارية المحروقة = قيمة MET × وزن الجسم (كجم) × المدة (بالساعات). هذا يضمن أن تعكس تمارينك الرياضية بدقة استهلاك الطاقة الفعلي."
+                }
+              ].map((faq, index) => (
+                <View key={index} className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm">
+                  <Text className={`text-sm font-outfit-bold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {isRtl ? faq.q_ar : faq.q_en}
+                  </Text>
+                  <Text className={`text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {isRtl ? faq.a_ar : faq.a_en}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View className="flex-1 justify-center items-center bg-black/50 px-6">
+          <View className="bg-white rounded-3xl p-6 w-full max-w-sm border border-border-muted shadow-xl">
+            <View className="items-center mb-4">
+              <View className="w-12 h-12 bg-red-100 rounded-full items-center justify-center mb-3">
+                <Ionicons name="alert-circle" size={28} color="#DC2626" />
+              </View>
+              <Text className="text-base font-outfit-bold text-text-primary text-center">
+                {t.confirmDeleteAccountTitle}
+              </Text>
+            </View>
+            <Text className="text-xs font-inter-regular text-text-muted leading-relaxed text-center mb-6">
+              {t.confirmDeleteAccountMsg}
+            </Text>
+            <View className="gap-y-2">
+              <TouchableOpacity
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  useDiaryStore.getState().resetAll();
+                  if (isSignedIn) signOut();
+                  Alert.alert(
+                    isRtl ? 'تم حذف الحساب' : 'Account Deleted', 
+                    isRtl ? 'تم حذف حسابك وبياناتك بنجاح.' : 'Your account and history have been deleted successfully.'
+                  );
+                }}
+                className="bg-red-600 rounded-xl py-3 items-center justify-center"
+              >
+                <Text className="text-white text-xs font-outfit-bold">{t.deleteBtn}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowDeleteModal(false)}
+                className="bg-bg-base border border-border-muted rounded-xl py-3 items-center justify-center"
+              >
+                <Text className="text-text-primary text-xs font-outfit-bold">{t.cancel}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  activeTab: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.18,
-    shadowRadius: 1,
-    elevation: 1,
-  },
-});

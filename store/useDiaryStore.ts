@@ -26,6 +26,27 @@ export interface UserProfile {
   target_carbs_g: number;
   target_fat_g: number;
   target_water_ml: number;
+
+  goal_weight_kg?: number;
+  
+  // Measurement Units
+  unit_weight?: 'kg' | 'lbs';
+  unit_height?: 'cm' | 'ft_in';
+  unit_water?: 'ml' | 'fl_oz';
+
+  // Push Notifications / Reminders
+  reminder_meals?: boolean;
+  reminder_water?: boolean;
+  reminder_workout?: boolean;
+
+  // Custom Nutrition Adjustments / Macros
+  macro_preset?: 'balanced' | 'high_protein' | 'keto' | 'custom';
+  macro_carbs_pct?: number;
+  macro_protein_pct?: number;
+  macro_fat_pct?: number;
+
+  // App settings extension
+  app_theme?: 'light' | 'dark' | 'system';
 }
 
 export interface FoodLogEntry {
@@ -120,17 +141,34 @@ export function calculateNutrientTargets(profile: Omit<UserProfile, 'target_calo
   target_calories = Math.max(1200, Math.round(target_calories));
 
   // 4. Macro Targets
-  // Protein: 2.0g per kg of body weight
-  const target_protein_g = Math.round(weight_kg * 2.0);
-  
-  // Fat: 25% of total calories (1g fat = 9 kcal)
-  const target_fat_g = Math.round((target_calories * 0.25) / 9);
+  let target_protein_g = 0;
+  let target_fat_g = 0;
+  let target_carbs_g = 0;
 
-  // Carbs: Remaining calories (1g carb = 4 kcal)
-  const protein_calories = target_protein_g * 4;
-  const fat_calories = target_fat_g * 9;
-  const remaining_calories = target_calories - (protein_calories + fat_calories);
-  const target_carbs_g = Math.max(50, Math.round(remaining_calories / 4));
+  if (
+    profile.macro_carbs_pct !== undefined &&
+    profile.macro_protein_pct !== undefined &&
+    profile.macro_fat_pct !== undefined
+  ) {
+    const cPct = profile.macro_carbs_pct;
+    const pPct = profile.macro_protein_pct;
+    const fPct = profile.macro_fat_pct;
+    target_protein_g = Math.round((target_calories * (pPct / 100)) / 4);
+    target_fat_g = Math.round((target_calories * (fPct / 100)) / 9);
+    target_carbs_g = Math.round((target_calories * (cPct / 100)) / 4);
+  } else {
+    // Protein: 2.0g per kg of body weight
+    target_protein_g = Math.round(weight_kg * 2.0);
+    
+    // Fat: 25% of total calories (1g fat = 9 kcal)
+    target_fat_g = Math.round((target_calories * 0.25) / 9);
+
+    // Carbs: Remaining calories (1g carb = 4 kcal)
+    const protein_calories = target_protein_g * 4;
+    const fat_calories = target_fat_g * 9;
+    const remaining_calories = target_calories - (protein_calories + fat_calories);
+    target_carbs_g = Math.max(50, Math.round(remaining_calories / 4));
+  }
 
   // Water: 35ml per kg of body weight, rounded to nearest 250ml
   const target_water_ml = Math.round((weight_kg * 35) / 250) * 250;
@@ -182,6 +220,18 @@ export const useDiaryStore = create<DiaryState>()(
           diet_type: 'classic',
           exclusions: [],
           disliked_ingredients: [],
+          goal_weight_kg: 70,
+          unit_weight: 'kg',
+          unit_height: 'cm',
+          unit_water: 'ml',
+          reminder_meals: true,
+          reminder_water: true,
+          reminder_workout: true,
+          macro_preset: 'balanced',
+          macro_carbs_pct: 40,
+          macro_protein_pct: 30,
+          macro_fat_pct: 30,
+          app_theme: 'system',
         };
 
         const targets = calculateNutrientTargets(defaultRawProfile);
@@ -204,14 +254,17 @@ export const useDiaryStore = create<DiaryState>()(
             ...newProfileFields,
           };
 
-          // Re-calculate targets if core metrics change
+          // Re-calculate targets if core metrics or custom macro percentages change
           const coreMetricsChanged =
             newProfileFields.weight_kg !== undefined ||
             newProfileFields.height_cm !== undefined ||
             newProfileFields.age !== undefined ||
             newProfileFields.gender !== undefined ||
             newProfileFields.activity_level !== undefined ||
-            newProfileFields.health_goal !== undefined;
+            newProfileFields.health_goal !== undefined ||
+            newProfileFields.macro_carbs_pct !== undefined ||
+            newProfileFields.macro_protein_pct !== undefined ||
+            newProfileFields.macro_fat_pct !== undefined;
 
           const targets = coreMetricsChanged
             ? calculateNutrientTargets(updatedRaw)

@@ -17,6 +17,7 @@ import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { PresstoButton } from '@/components/PresstoButton';
 import { images } from '@/constants/images';
+import Svg, { Defs, RadialGradient, Stop, Ellipse } from 'react-native-svg';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -43,8 +44,8 @@ export default function WelcomeScreen() {
   }));
 
   const animatedShadowStyle = useAnimatedStyle(() => {
-    const scale = interpolate(translateY.value, [-12, 0], [0.85, 1.0], Extrapolate.CLAMP);
-    const opacity = interpolate(translateY.value, [-12, 0], [0.04, 0.12], Extrapolate.CLAMP);
+    const scale = interpolate(translateY.value, [-12, 0], [0.75, 1.0], Extrapolate.CLAMP);
+    const opacity = interpolate(translateY.value, [-12, 0], [0.2, 0.55], Extrapolate.CLAMP);
     return {
       transform: [{ scale }],
       opacity,
@@ -125,7 +126,27 @@ export default function WelcomeScreen() {
           </Animated.View>
           
           {/* Synchronized Volumetric Shadow */}
-          <Animated.View style={[styles.volumetricShadow, animatedShadowStyle]} />
+          <Animated.View style={[styles.volumetricShadow, animatedShadowStyle]}>
+            <Svg height="100%" width="100%" viewBox="0 0 200 40">
+              <Defs>
+                <RadialGradient
+                  id="volumetricShadowGrad"
+                  cx="50%"
+                  cy="50%"
+                  rx="50%"
+                  ry="50%"
+                  fx="50%"
+                  fy="50%"
+                >
+                  <Stop offset="0%" stopColor="#1C2820" stopOpacity="0.8" />
+                  <Stop offset="30%" stopColor="#1C2820" stopOpacity="0.55" />
+                  <Stop offset="65%" stopColor="#1C2820" stopOpacity="0.2" />
+                  <Stop offset="100%" stopColor="#1C2820" stopOpacity="0" />
+                </RadialGradient>
+              </Defs>
+              <Ellipse cx="100" cy="20" rx="90" ry="16" fill="url(#volumetricShadowGrad)" />
+            </Svg>
+          </Animated.View>
         </View>
 
         {/* Value Proposition */}
@@ -236,11 +257,9 @@ const styles = StyleSheet.create({
   },
   volumetricShadow: {
     position: 'absolute',
-    bottom: 0,
-    width: 140,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#000000',
+    bottom: -6,
+    width: 170,
+    height: 30,
     zIndex: 1,
   },
   textWrapper: {
