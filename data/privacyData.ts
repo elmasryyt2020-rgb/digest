@@ -53,11 +53,11 @@ export const privacySections: PrivacySection[] = [
     title_ar: "٣. الفحص الذكي ومعالجة الصور",
     paragraphs_en: [
       "Our app features an AI-based vision food recognition tool. If you grant camera and gallery permissions, the app will process images of your food items.",
-      "Image processing is performed securely via private cloud AI services to detect bounding boxes and food names. Your raw photos are processed in memory and are not stored permanently. Once a food item is identified, nutrition information is queried from our verified, cached databases (such as the USDA database and Open Food Facts) instead of using arbitrary AI guesses."
+      "Image processing is performed securely via private cloud AI services to detect bounding boxes and food names. Your raw photos are processed in memory and are not stored permanently. Once a food item is identified, nutrition information is queried from verified databases instead of using arbitrary AI guesses."
     ],
     paragraphs_ar: [
       "يتميز تطبيقنا بأداة ذكاء اصطناعي للتعرف على الأطعمة من خلال الكاميرا. إذا منحت إذناً للوصول إلى الكاميرا ومعرض الصور، سيقوم التطبيق بمعالجة صور أطعمتك.",
-      "تتم معالجة الصور بشكل آمن عبر خدمات الذكاء الاصطناعي السحابية الخاصة لتحديد الأطعمة ومربعات الإحاطة حولها. تتم معالجة صورك الخام في الذاكرة المؤقتة ولا يتم تخزينها بشكل دائم. بمجرد التعرف على الطعام، يتم استعلام البيانات الغذائية من قواعد بياناتنا الموثقة (مثل USDA وOpen Food Facts) بدلاً من الاعتماد على تخمينات عشوائية."
+      "تتم معالجة الصور بشكل آمن عبر خدمات الذكاء الاصطناعي السحابية الخاصة لتحديد الأطعمة ومربعات الإحاطة حولها. تتم معالجة صورك الخام في الذاكرة المؤقتة ولا يتم تخزينها بشكل دائم. بمجرد التعرف على الطعام، يتم استعلام البيانات الغذائية من قواعد البيانات الموثقة لدينا بدلاً من الاعتماد على تخمينات عشوائية."
     ]
   },
   {
@@ -66,12 +66,12 @@ export const privacySections: PrivacySection[] = [
     title_en: "4. Storage, Retention & Third Parties",
     title_ar: "٤. التخزين، الاحتفاظ بالبيانات والأطراف الثالثة",
     paragraphs_en: [
-      "Your authenticated account data, profile details, and health logs are stored securely using Supabase cloud infrastructure (Auth, Database, Storage, and Edge Functions).",
-      "We cache your local trial state and offline logs locally on your device using AsyncStorage for performance. When you are online, these logs synchronize securely with your private account database on Supabase."
+      "Your authenticated account data, profile details, and health logs are stored securely using our secure cloud infrastructure.",
+      "We cache your local trial state and offline logs locally on your device using local storage for performance. When you are online, these logs synchronize securely with your private account database in the cloud."
     ],
     paragraphs_ar: [
-      "يتم تخزين بيانات حسابك الموثق، تفاصيل ملفك الشخصي، وسجلاتك الصحية بأمان باستخدام البنية التحتية السحابية لـ Supabase (المصادقة، قواعد البيانات، التخزين، والوظائف الطرفية).",
-      "نقوم بحفظ حالة التطبيق التجريبية وسجلاتك المحلية مؤقتاً على جهازك باستخدام AsyncStorage لتحسين الأداء. عندما تكون متصلاً بالإنترنت، تتزامن هذه السجلات بأمان مع قاعدة بيانات حسابك الخاصة على Supabase."
+      "يتم تخزين بيانات حسابك الموثق، تفاصيل ملفك الشخصي، وسجلاتك الصحية بأمان باستخدام البنية التحتية السحابية الآمنة لدينا.",
+      "نقوم بحفظ حالة التطبيق التجريبية وسجلاتك المحلية مؤقتاً على جهازك باستخدام التخزين المحلي لتحسين الأداء. عندما تكون متصلاً بالإنترنت، تتزامن هذه السجلات بأمان مع قاعدة بيانات حسابك الخاصة في السحاب."
     ]
   },
   {

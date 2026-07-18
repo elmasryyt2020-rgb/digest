@@ -1581,7 +1581,7 @@ export default function ProfileScreen() {
             contentContainerStyle={{ padding: 20, paddingBottom: 60 }} 
             showsVerticalScrollIndicator={false}
           >
-            <View className="gap-y-6">
+            <View className="gap-y-4">
               {privacySections.map((section) => (
                 <View 
                   key={section.id} 
