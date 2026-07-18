@@ -480,10 +480,73 @@ Provide ONLY the response without any formatting, markdown, or preambles.`;
     // 3. Await resolution
     const pdfBytes = await pdfBytesPromise;
 
-    // Temporal return block for verification
+    // 1. Proactive Sweeper - List user files in reports/userId and delete files older than 1 hour in background
+    try {
+      const { data: listData, error: listError } = await supabase.storage.from('reports').list(userId);
+      if (listError) throw listError;
+      
+      if (listData && listData.length > 0) {
+        const now = Date.now();
+        const filesToDelete: string[] = [];
+        for (const f of listData) {
+          const createdAt = new Date(f.created_at).getTime();
+          // 1 hour = 3600000 ms
+          if (now - createdAt > 3600000) {
+            filesToDelete.push(`${userId}/${f.name}`);
+          }
+        }
+        if (filesToDelete.length > 0) {
+          const { error: sweepDeleteError } = await supabase.storage.from('reports').remove(filesToDelete);
+          if (sweepDeleteError) console.error('Sweeper removal error:', sweepDeleteError.message);
+        }
+      }
+    } catch (sweepErr: any) {
+      console.error('Sweeper background warning:', sweepErr.message);
+    }
+
+    // 2. Pre-generation cleanup: delete user's current directory files before writing the new one
+    try {
+      const { data: currentFiles, error: currentFilesError } = await supabase.storage.from('reports').list(userId);
+      if (currentFilesError) throw currentFilesError;
+      
+      if (currentFiles && currentFiles.length > 0) {
+        const toClean = currentFiles.map((f: any) => `${userId}/${f.name}`);
+        const { error: cleanDeleteError } = await supabase.storage.from('reports').remove(toClean);
+        if (cleanDeleteError) console.error('Pre-generation cleanup removal error:', cleanDeleteError.message);
+      }
+    } catch (cleanErr: any) {
+      console.error('Pre-generation cleanup warning:', cleanErr.message);
+    }
+
+    // 3. Upload PDF
+    const uniqueFileName = `weekly_summary_${Date.now()}_${Math.random().toString(36).substring(7)}.pdf`;
+    const filePath = `${userId}/${uniqueFileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('reports')
+      .upload(filePath, pdfBytes, {
+        contentType: 'application/pdf',
+        cacheControl: '3600',
+        upsert: true
+      });
+    if (uploadError) {
+      status = 500;
+      throw new Error(uploadError.message);
+    }
+
+    // 4. Generate 5-minute signed URL
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from('reports')
+      .createSignedUrl(filePath, 300); // 300 seconds = 5 minutes
+    
+    if (signedError || !signedData) {
+      status = 500;
+      throw new Error(signedError?.message || 'Failed to generate secure signed link');
+    }
+
     return new Response(JSON.stringify({ 
-      success: true, 
-      pdfSize: pdfBytes.length 
+      url: signedData.signedUrl, 
+      fileName: uniqueFileName 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
