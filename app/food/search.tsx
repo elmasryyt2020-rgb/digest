@@ -554,6 +554,16 @@ export default function FoodSearchScreen() {
 
       // 2. Fetch from Open Food Facts API
       const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      if (response.status === 404) {
+        Alert.alert(
+          isRtl ? 'المنتج غير موجود' : 'Product Not Found',
+          isRtl ? 'المنتج غير موجود في قاعدة البيانات. يرجى البحث يدوياً.' : 'Product not found in the database. Please search manually.'
+        );
+        setMode('search');
+        setIsProcessingBarcode(false);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('OFF_API_ERROR');
       }
