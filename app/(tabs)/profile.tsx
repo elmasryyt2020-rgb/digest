@@ -12,6 +12,10 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
+import { supabase } from '@/lib/supabase';
+import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming, interpolateColor, Easing } from 'react-native-reanimated';
 import { useDiaryStore } from '@/store/useDiaryStore';
@@ -20,6 +24,16 @@ import { PresstoButton } from '@/components/PresstoButton';
 import { faqCategories } from '@/data/faqData';
 import { privacySections } from '@/data/privacyData';
 import { termsSections } from '@/data/termsData';
+import {
+  requestNotificationPermission,
+  scheduleMealReminders,
+  cancelMealReminders,
+  scheduleWaterReminders,
+  cancelWaterReminders,
+  scheduleWorkoutReminders,
+  cancelWorkoutReminders,
+  isNotificationsSupported,
+} from '@/lib/notifications';
 
 
 // Helper conversions for Ft/In and Cm
@@ -44,6 +58,8 @@ interface SegmentedControlProps<T extends string> {
 }
 
 function SegmentedControl<T extends string>({ options, selectedValue, onChange, isRtl }: SegmentedControlProps<T>) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const [containerWidth, setContainerWidth] = useState(0);
   const padding = 4;
   const innerWidth = containerWidth > 0 ? containerWidth - padding * 2 : 0;
@@ -77,7 +93,7 @@ function SegmentedControl<T extends string>({ options, selectedValue, onChange, 
   return (
     <View
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-      className="flex-row bg-[#F0F2F0] p-1 rounded-xl relative h-11 items-center"
+      className="flex-row bg-[#F0F2F0] dark:bg-border-muted p-1 rounded-xl relative h-11 items-center"
     >
       {containerWidth > 0 && activeIndex !== -1 && (
         <Animated.View
@@ -88,7 +104,7 @@ function SegmentedControl<T extends string>({ options, selectedValue, onChange, 
               top: padding,
               bottom: padding,
               left: padding,
-              backgroundColor: '#FFFFFF',
+              backgroundColor: isDark ? '#161B18' : '#FFFFFF',
               borderRadius: 8,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 1 },
@@ -128,6 +144,8 @@ interface AnimatedSwitchProps {
 }
 
 function AnimatedSwitch({ value, onValueChange }: AnimatedSwitchProps) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const translateX = useSharedValue(value ? 18 : 2);
 
   translateX.value = withTiming(value ? 18 : 2, {
@@ -139,7 +157,7 @@ function AnimatedSwitch({ value, onValueChange }: AnimatedSwitchProps) {
     const backgroundColor = interpolateColor(
       translateX.value,
       [2, 18],
-      ['#EAECEB', '#4C6E58'] // border-muted to accent-sage
+      isDark ? ['#1A2420', '#5C856C'] : ['#EAECEB', '#4C6E58']
     );
     return { backgroundColor };
   });
@@ -164,7 +182,7 @@ function AnimatedSwitch({ value, onValueChange }: AnimatedSwitchProps) {
             width: 20,
             height: 20,
             borderRadius: 10,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: isDark ? '#161B18' : '#FFFFFF',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 1 },
             shadowOpacity: 0.15,
@@ -178,6 +196,8 @@ function AnimatedSwitch({ value, onValueChange }: AnimatedSwitchProps) {
 }
 
 export default function ProfileScreen() {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   // Zustand State
   const profile = useDiaryStore((state) => state.profile);
   const setProfile = useDiaryStore((state) => state.setProfile);
@@ -186,6 +206,7 @@ export default function ProfileScreen() {
   const user = useAuthStore((state) => state.user);
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
   const signOut = useAuthStore((state) => state.signOut);
+  const deleteAccount = useAuthStore((state) => state.deleteAccount);
 
   // Local UI states
   const [exporting, setExporting] = useState(false);
@@ -336,9 +357,84 @@ export default function ProfileScreen() {
     }
   }, [profile?.weight_kg, profile?.height_cm, profile?.age, profile?.goal_weight_kg, profile?.unit_weight, profile?.unit_height]);
 
-  const handleStatChange = (field: string, value: any) => {
+  const handleStatChange = async (field: string, value: any) => {
     setProfile({ [field]: value });
+
+    // If language changed, reschedule active notifications
+    if (field === 'language') {
+      const newLang = value as 'ar' | 'en';
+      if (profile?.reminder_meals) {
+        try { await scheduleMealReminders(newLang); } catch (_) {}
+      }
+      if (profile?.reminder_water) {
+        try { await scheduleWaterReminders(newLang); } catch (_) {}
+      }
+      if (profile?.reminder_workout) {
+        try { await scheduleWorkoutReminders(newLang); } catch (_) {}
+      }
+    }
   };
+
+  const handleReminderToggle = async (type: 'meals' | 'water' | 'workout', enabled: boolean) => {
+    if (enabled) {
+      if (!isNotificationsSupported) {
+        Alert.alert(
+          isRtl ? 'الإشعارات غير مدعومة' : 'Notifications Unsupported',
+          isRtl
+            ? 'ميزات الإشعارات غير مدعومة في بيئة Expo Go الحالية على أندرويد. يرجى استخدام Development Build لتشغيلها.'
+            : 'Notification features are not supported in the current Expo Go environment on Android. Please use a Development Build instead.'
+        );
+        return;
+      }
+
+      const hasPermission = await requestNotificationPermission();
+      if (!hasPermission) {
+        Alert.alert(
+          isRtl ? 'تم رفض إذن الإشعارات' : 'Notification Permission Denied',
+          isRtl
+            ? 'يرجى تمكين إذن الإشعارات من إعدادات جهازك لتلقي التنبيهات.'
+            : 'Please enable notification permissions in your device settings to receive reminders.'
+        );
+        return;
+      }
+
+      // Schedule reminders
+      try {
+        if (type === 'meals') {
+          await scheduleMealReminders(language);
+        } else if (type === 'water') {
+          await scheduleWaterReminders(language);
+        } else if (type === 'workout') {
+          await scheduleWorkoutReminders(language);
+        }
+      } catch (err) {
+        console.error(`Error scheduling ${type} reminders:`, err);
+        Alert.alert(
+          isRtl ? 'خطأ' : 'Error',
+          isRtl ? 'فشل في إعداد التذكيرات. يرجى المحاولة مرة أخرى.' : 'Failed to set up reminders. Please try again.'
+        );
+        return;
+      }
+    } else {
+      // Cancel reminders
+      try {
+        if (type === 'meals') {
+          await cancelMealReminders();
+        } else if (type === 'water') {
+          await cancelWaterReminders();
+        } else if (type === 'workout') {
+          await cancelWorkoutReminders();
+        }
+      } catch (err) {
+        console.error(`Error canceling ${type} reminders:`, err);
+      }
+    }
+
+    // Persist change
+    handleStatChange(`reminder_${type}`, enabled);
+  };
+
+  const [reportFileName, setReportFileName] = useState<string | null>(null);
 
   const handleExportPDF = async () => {
     if (!isSignedIn) {
@@ -348,11 +444,78 @@ export default function ProfileScreen() {
 
     setExporting(true);
     setExportSuccessUrl(null);
+    setReportFileName(null);
 
-    setTimeout(() => {
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-pdf-report', {
+        body: {},
+      });
+
+      if (error || !data || !data.url) {
+        throw new Error(error?.message || 'Failed to generate report PDF');
+      }
+
+      setExportSuccessUrl(data.url);
+      setReportFileName(data.fileName);
+    } catch (err: any) {
+      console.error('PDF generation error:', err);
+      Alert.alert(
+        isRtl ? 'خطأ' : 'Error',
+        isRtl ? 'فشل إنشاء تقرير PDF. يرجى المحاولة مرة أخرى.' : 'Failed to generate PDF report. Please try again.'
+      );
+    } finally {
       setExporting(false);
-      setExportSuccessUrl('https://supabase.co/storage/v1/object/public/reports/digest_summary.pdf');
-    }, 2000);
+    }
+  };
+
+  const handleDownloadAndSharePDF = async () => {
+    if (!exportSuccessUrl || !reportFileName) return;
+
+    try {
+      const localUri = `${FileSystem.cacheDirectory}${reportFileName}`;
+      
+      // Download signed PDF locally
+      const downloadResult = await FileSystem.downloadAsync(exportSuccessUrl, localUri);
+      
+      if (downloadResult.status !== 200) {
+        throw new Error('PDF download failed');
+      }
+
+      // Check if sharing is available and share
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+      if (isSharingAvailable) {
+        await Sharing.shareAsync(downloadResult.uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: isRtl ? 'تحميل التقرير الصحي' : 'Download Health Summary',
+          UTI: 'com.adobe.pdf',
+        });
+      } else {
+        Alert.alert(
+          isRtl ? 'مشاركة غير مدعومة' : 'Sharing not available',
+          isRtl ? 'لا يدعم هذا الجهاز مشاركة الملفات.' : 'This device does not support file sharing.'
+        );
+      }
+
+      // Proactively clean up file on storage server immediately
+      await supabase.functions.invoke('generate-pdf-report', {
+        body: { action: 'delete', fileName: reportFileName },
+      });
+
+      // Clear state
+      setExportSuccessUrl(null);
+      setReportFileName(null);
+      
+      Alert.alert(
+        isRtl ? 'تم بنجاح' : 'Success',
+        isRtl ? 'تم تحميل ومشاركة التقرير الصحي بنجاح.' : 'Health report shared and downloaded successfully.'
+      );
+    } catch (error: any) {
+      console.error('Download/Share PDF error:', error);
+      Alert.alert(
+        isRtl ? 'خطأ' : 'Error',
+        isRtl ? 'فشل تحميل الملف. يرجى المحاولة لاحقاً.' : 'Failed to retrieve the file. Please try again.'
+      );
+    }
   };
 
   const getGoalText = () => {
@@ -401,9 +564,9 @@ export default function ProfileScreen() {
   const filteredFaqs = getFilteredFAQs();
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       {/* Header */}
-      <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+      <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
         <View className="w-10" />
         <Text className="text-base font-outfit-bold text-text-primary">{t.title}</Text>
         <View className="w-10" />
@@ -412,14 +575,14 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         
         {/* User Profile Header Card */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm items-center">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm items-center">
           <View className="w-16 h-16 rounded-full bg-accent-sage/10 items-center justify-center border border-accent-sage/20 mb-3">
             {isSignedIn && user ? (
               <Text className="text-xl font-outfit-bold text-accent-sage">
                 {user.name ? user.name.slice(0, 2).toUpperCase() : 'US'}
               </Text>
             ) : (
-              <Ionicons name="person-outline" size={28} color="#4C6E58" />
+              <Ionicons name="person-outline" size={28} color={isDark ? '#5C856C' : '#4C6E58'} />
             )}
           </View>
           
@@ -461,14 +624,14 @@ export default function ProfileScreen() {
           
           {exporting ? (
             <View className="flex-row justify-center items-center py-2">
-              <ActivityIndicator size="small" color="#4C6E58" style={{ marginRight: 8 }} />
+              <ActivityIndicator size="small" color={isDark ? '#5C856C' : '#4C6E58'} style={{ marginRight: 8 }} />
               <Text className="color-accent-sage text-xs font-outfit-bold">{t.pdfGenerating}</Text>
             </View>
           ) : exportSuccessUrl ? (
             <View className="mt-2">
               <Text className={`color-accent-sage text-xs font-outfit-bold mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>✓ {t.pdfSuccess}</Text>
               <TouchableOpacity 
-                onPress={() => Alert.alert('PDF Downloaded', 'Health summary PDF downloaded successfully.')}
+                onPress={handleDownloadAndSharePDF}
                 className="bg-accent-sage rounded-xl py-3 flex-row items-center justify-center"
               >
                 <Ionicons name="cloud-download-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
@@ -489,22 +652,22 @@ export default function ProfileScreen() {
         </View>
 
         {/* Section 2: Dynamic Targets Summary Table */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.targetSummary}</Text>
           <View className="gap-y-3">
-            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] dark:border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Text className="text-xs font-outfit-semibold text-text-muted">{t.calories}</Text>
               <Text className="text-xs font-inter-bold text-text-primary">{profile?.target_calories || 2000} kcal</Text>
             </View>
-            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] dark:border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Text className="text-xs font-outfit-semibold text-text-muted">{t.protein}</Text>
               <Text className="text-xs font-inter-bold text-text-primary">{profile?.target_protein_g || 120} g</Text>
             </View>
-            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] dark:border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Text className="text-xs font-outfit-semibold text-text-muted">{t.carbs}</Text>
               <Text className="text-xs font-inter-bold text-text-primary">{profile?.target_carbs_g || 200} g</Text>
             </View>
-            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <View className={`flex-row justify-between py-2 border-b border-[#F0F2F0] dark:border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Text className="text-xs font-outfit-semibold text-text-muted">{t.fats}</Text>
               <Text className="text-xs font-inter-bold text-text-primary">{profile?.target_fat_g || 65} g</Text>
             </View>
@@ -521,7 +684,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Section 3: Biometrics Settings (Collapsible) */}
-        <View className={`bg-white rounded-3xl border border-border-muted mb-5 shadow-sm ${showBiometrics ? 'p-5' : 'p-4'}`}>
+        <View className={`bg-bg-card rounded-3xl border border-border-muted mb-5 shadow-sm ${showBiometrics ? 'p-5' : 'p-4'}`}>
           <TouchableOpacity
             onPress={() => setShowBiometrics(!showBiometrics)}
             className={`flex-row justify-between items-center ${showBiometrics ? 'mb-4' : ''} ${isRtl ? 'flex-row-reverse' : ''}`}
@@ -530,7 +693,7 @@ export default function ProfileScreen() {
               <Ionicons
                 name="fitness-outline"
                 size={20}
-                color="#4C6E58"
+                color={isDark ? '#5C856C' : '#4C6E58'}
                 style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }}
               />
               <View className="flex-1">
@@ -545,7 +708,7 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             </View>
-            <Ionicons name={showBiometrics ? "chevron-up" : "chevron-down"} size={20} color="#626A66" />
+            <Ionicons name={showBiometrics ? "chevron-up" : "chevron-down"} size={20} color={isDark ? '#8A9690' : '#626A66'} />
           </TouchableOpacity>
 
           {showBiometrics && (
@@ -568,7 +731,7 @@ export default function ProfileScreen() {
               <View>
                 <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.age}</Text>
                 <TextInput
-                  className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`bg-bg-card border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                   keyboardType="numeric"
                   value={ageText}
                   onChangeText={(text) => {
@@ -584,7 +747,7 @@ export default function ProfileScreen() {
                   {profile?.unit_weight === 'lbs' ? (isRtl ? 'الوزن (رطل)' : 'Weight (lbs)') : (isRtl ? 'الوزن (كجم)' : 'Weight (kg)')}
                 </Text>
                 <TextInput
-                  className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`bg-bg-card border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                   keyboardType="numeric"
                   value={weightText}
                   onChangeText={(text) => {
@@ -605,7 +768,7 @@ export default function ProfileScreen() {
                   {profile?.unit_weight === 'lbs' ? (isRtl ? 'الوزن المستهدف (رطل)' : 'Goal Weight (lbs)') : (isRtl ? 'الوزن المستهدف (كجم)' : 'Goal Weight (kg)')}
                 </Text>
                 <TextInput
-                  className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`bg-bg-card border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                   keyboardType="numeric"
                   value={goalWeightText}
                   onChangeText={(text) => {
@@ -629,7 +792,7 @@ export default function ProfileScreen() {
                   <View className={`flex-row gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                     <View className="flex-1">
                       <TextInput
-                        className="bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary text-center"
+                        className="bg-bg-card border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary text-center"
                         keyboardType="numeric"
                         value={heightFt}
                         placeholder={t.feet}
@@ -645,7 +808,7 @@ export default function ProfileScreen() {
                     </View>
                     <View className="flex-1">
                       <TextInput
-                        className="bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary text-center"
+                        className="bg-bg-card border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary text-center"
                         keyboardType="numeric"
                         value={heightIn}
                         placeholder={t.inches}
@@ -662,7 +825,7 @@ export default function ProfileScreen() {
                   </View>
                 ) : (
                   <TextInput
-                    className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`bg-bg-card border border-border-muted rounded-xl px-3 py-2.5 font-inter-regular text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                     keyboardType="numeric"
                     value={heightCm}
                     onChangeText={(text) => {
@@ -681,8 +844,8 @@ export default function ProfileScreen() {
                     <TouchableOpacity
                       key={level}
                       onPress={() => handleStatChange('activity_level', level)}
-                      className={`flex-row justify-between items-center p-3 border border-border-muted rounded-xl bg-white ${
-                        profile?.activity_level === level ? 'border-accent-sage bg-[#F3F6F3]' : ''
+                      className={`flex-row justify-between items-center p-3 border border-border-muted rounded-xl bg-bg-card ${
+                        profile?.activity_level === level ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : ''
                       } ${isRtl ? 'flex-row-reverse' : ''}`}
                     >
                       <Text className={`text-xs font-inter-medium ${profile?.activity_level === level ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
@@ -692,7 +855,7 @@ export default function ProfileScreen() {
                         {level === 'very_active' && (isRtl ? 'نشط جداً (تمارين يومية مكثفة)' : 'Very active')}
                       </Text>
                       {profile?.activity_level === level && (
-                        <Ionicons name="checkmark" size={16} color="#4C6E58" />
+                        <Ionicons name="checkmark" size={16} color={isDark ? '#5C856C' : '#4C6E58'} />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -707,8 +870,8 @@ export default function ProfileScreen() {
                     <TouchableOpacity
                       key={goal}
                       onPress={() => handleStatChange('health_goal', goal)}
-                      className={`flex-row justify-between items-center p-3 border border-border-muted rounded-xl bg-white ${
-                        profile?.health_goal === goal ? 'border-accent-sage bg-[#F3F6F3]' : ''
+                      className={`flex-row justify-between items-center p-3 border border-border-muted rounded-xl bg-bg-card ${
+                        profile?.health_goal === goal ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : ''
                       } ${isRtl ? 'flex-row-reverse' : ''}`}
                     >
                       <Text className={`text-xs font-inter-medium ${profile?.health_goal === goal ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
@@ -717,7 +880,7 @@ export default function ProfileScreen() {
                         {goal === 'gain_weight' && (isRtl ? 'زيادة الوزن' : 'Gain Weight')}
                       </Text>
                       {profile?.health_goal === goal && (
-                        <Ionicons name="checkmark" size={16} color="#4C6E58" />
+                        <Ionicons name="checkmark" size={16} color={isDark ? '#5C856C' : '#4C6E58'} />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -730,10 +893,10 @@ export default function ProfileScreen() {
         {/* Dietary Preferences Row */}
         <TouchableOpacity
           onPress={() => setShowDietaryModal(true)}
-          className={`flex-row justify-between items-center p-4 border border-border-muted rounded-3xl bg-white mb-5 shadow-sm ${isRtl ? 'flex-row-reverse' : ''}`}
+          className={`flex-row justify-between items-center p-4 border border-border-muted rounded-3xl bg-bg-card mb-5 shadow-sm ${isRtl ? 'flex-row-reverse' : ''}`}
         >
           <View className={`flex-row items-center flex-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <Ionicons name="nutrition-outline" size={20} color="#4C6E58" style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} />
+            <Ionicons name="nutrition-outline" size={20} color={isDark ? '#5C856C' : '#4C6E58'} style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} />
             <View className="flex-1">
               <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
                 {isRtl ? 'التفضيلات الغذائية' : 'Dietary Preferences'}
@@ -743,7 +906,7 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
-          <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={20} color="#626A66" />
+          <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={20} color={isDark ? '#8A9690' : '#626A66'} />
         </TouchableOpacity>
 
         {/* Adjust Macro Ratios Button Row */}
@@ -755,10 +918,10 @@ export default function ProfileScreen() {
             setMacroFat(profile?.macro_fat_pct ?? 30);
             setShowMacroModal(true);
           }}
-          className={`flex-row justify-between items-center p-4 border border-border-muted rounded-3xl bg-white mb-5 shadow-sm ${isRtl ? 'flex-row-reverse' : ''}`}
+          className={`flex-row justify-between items-center p-4 border border-border-muted rounded-3xl bg-bg-card mb-5 shadow-sm ${isRtl ? 'flex-row-reverse' : ''}`}
         >
           <View className={`flex-row items-center flex-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <Ionicons name="pie-chart-outline" size={20} color="#4C6E58" style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} />
+            <Ionicons name="pie-chart-outline" size={20} color={isDark ? '#5C856C' : '#4C6E58'} style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} />
             <View className="flex-1">
               <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
                 {t.adjustMacros}
@@ -779,11 +942,11 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </View>
-          <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={20} color="#626A66" />
+          <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={20} color={isDark ? '#8A9690' : '#626A66'} />
         </TouchableOpacity>
 
         {/* Section: Measurement Units */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
             {t.unitPref}
           </Text>
@@ -839,7 +1002,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Section: Reminders & Notifications */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
             {t.reminders}
           </Text>
@@ -856,7 +1019,7 @@ export default function ProfileScreen() {
               </View>
               <AnimatedSwitch
                 value={!!profile?.reminder_meals}
-                onValueChange={(val) => handleStatChange('reminder_meals', val)}
+                onValueChange={(val) => handleReminderToggle('meals', val)}
               />
             </View>
 
@@ -872,7 +1035,7 @@ export default function ProfileScreen() {
               </View>
               <AnimatedSwitch
                 value={!!profile?.reminder_water}
-                onValueChange={(val) => handleStatChange('reminder_water', val)}
+                onValueChange={(val) => handleReminderToggle('water', val)}
               />
             </View>
 
@@ -888,14 +1051,14 @@ export default function ProfileScreen() {
               </View>
               <AnimatedSwitch
                 value={!!profile?.reminder_workout}
-                onValueChange={(val) => handleStatChange('reminder_workout', val)}
+                onValueChange={(val) => handleReminderToggle('workout', val)}
               />
             </View>
           </View>
         </View>
 
         {/* Section 4: Application Configurations (Language, Country priority) */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.appSettings}</Text>
 
           {/* Language Selection */}
@@ -943,21 +1106,21 @@ export default function ProfileScreen() {
         </View>
 
         {/* Support & Legal Card */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
             {isRtl ? 'المساعدة والبنود القانونية' : 'Help & Legal'}
           </Text>
-          <View className="divide-y divide-[#F0F2F0]">
+          <View className="divide-y divide-[#F0F2F0] dark:divide-border-muted">
             {/* Help & FAQ */}
             <TouchableOpacity 
               onPress={() => setShowFaqModal(true)} 
               className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
             >
               <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <Ionicons name="help-circle-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Ionicons name="help-circle-outline" size={18} color={isDark ? '#8A9690' : '#626A66'} style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.helpFAQ}</Text>
               </View>
-              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color="#9CA19E" />
+              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color={isDark ? '#8A9690' : '#9CA19E'} />
             </TouchableOpacity>
 
             {/* Privacy Policy */}
@@ -966,10 +1129,10 @@ export default function ProfileScreen() {
               className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
             >
               <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <Ionicons name="lock-closed-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Ionicons name="lock-closed-outline" size={18} color={isDark ? '#8A9690' : '#626A66'} style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.privacyPolicy}</Text>
               </View>
-              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color="#9CA19E" />
+              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color={isDark ? '#8A9690' : '#9CA19E'} />
             </TouchableOpacity>
 
             {/* Terms of Service */}
@@ -979,25 +1142,25 @@ export default function ProfileScreen() {
             >
 
               <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <Ionicons name="document-text-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Ionicons name="document-text-outline" size={18} color={isDark ? '#8A9690' : '#626A66'} style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.termsOfService}</Text>
               </View>
-              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color="#9CA19E" />
+              <Ionicons name={isRtl ? "chevron-back" : "chevron-forward"} size={16} color={isDark ? '#8A9690' : '#9CA19E'} />
             </TouchableOpacity>
 
             {/* App Version */}
             <View className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <Ionicons name="information-circle-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
+                <Ionicons name="information-circle-outline" size={18} color={isDark ? '#8A9690' : '#626A66'} style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
                 <Text className="text-xs font-outfit-semibold text-text-primary">{isRtl ? 'نسخة التطبيق' : 'App Version'}</Text>
               </View>
-              <Text className="text-[10px] font-inter-semibold text-text-muted">v1.0.0 (Build 42)</Text>
+              <Text className="text-[10px] font-inter-semibold text-text-muted">v1.0.0 (Build 1)</Text>
             </View>
           </View>
         </View>
 
         {/* Section: Danger Zone */}
-        <View className="bg-white rounded-3xl border border-red-100 p-5 mb-5 shadow-sm bg-red-50/10">
+        <View className="bg-bg-card rounded-3xl border border-red-100 p-5 mb-5 shadow-sm bg-red-50/10">
           <Text className={`text-sm font-outfit-bold text-red-800 mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
             {t.dangerZone}
           </Text>
@@ -1013,15 +1176,18 @@ export default function ProfileScreen() {
                     { 
                       text: isRtl ? 'مسح' : 'Clear', 
                       style: 'destructive', 
-                      onPress: () => {
+                      onPress: async () => {
                         useDiaryStore.getState().resetAll();
+                        if (isSignedIn && user?.id) {
+                          await useDiaryStore.getState().fetchFromSupabase(user.id);
+                        }
                         Alert.alert(isRtl ? 'تم المسح' : 'Cleared', isRtl ? 'تم مسح الذاكرة المؤقتة بنجاح.' : 'Local cache cleared successfully.');
                       } 
                     }
                   ]
                 );
               }}
-              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-white ${isRtl ? 'flex-row-reverse' : ''}`}
+              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
             >
               <Text className="text-xs font-outfit-semibold text-red-600">{t.clearCache}</Text>
               <Ionicons name="trash-bin-outline" size={16} color="#DC2626" />
@@ -1030,7 +1196,7 @@ export default function ProfileScreen() {
             {/* Delete Account */}
             <TouchableOpacity 
               onPress={() => setShowDeleteModal(true)}
-              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-white ${isRtl ? 'flex-row-reverse' : ''}`}
+              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
             >
               <Text className="text-xs font-outfit-semibold text-red-600">{t.deleteAccount}</Text>
               <Ionicons name="person-remove-outline" size={16} color="#DC2626" />
@@ -1049,10 +1215,10 @@ export default function ProfileScreen() {
                     ]
                   );
                 }}
-                className={`flex-row justify-between items-center p-3.5 border border-border-muted rounded-xl bg-white ${isRtl ? 'flex-row-reverse' : ''}`}
+                className={`flex-row justify-between items-center p-3.5 border border-border-muted rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
               >
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.signOutBtn}</Text>
-                <Ionicons name="log-out-outline" size={16} color="#1A1E1C" />
+                <Ionicons name="log-out-outline" size={16} color={isDark ? '#E5EAE5' : '#1A1E1C'} />
               </TouchableOpacity>
             )}
           </View>
@@ -1066,11 +1232,11 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowDietaryModal(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
           {/* Modal Header */}
-          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
             <TouchableOpacity onPress={() => setShowDietaryModal(false)} className="p-1">
-              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color={isDark ? '#E5EAE5' : '#1A1E1C'} />
             </TouchableOpacity>
             <Text className="text-base font-outfit-bold text-text-primary">
               {isRtl ? 'التفضيلات الغذائية' : 'Dietary Preferences'}
@@ -1080,7 +1246,7 @@ export default function ProfileScreen() {
 
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
             {/* Diet Type */}
-            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+            <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
               <Text className={`text-xs font-outfit-semibold text-text-primary mb-3.5 ${isRtl ? 'text-right' : 'text-left'}`}>
                 {isRtl ? 'نوع الدايت' : 'Diet Type'}
               </Text>
@@ -1095,15 +1261,15 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     key={diet.id}
                     onPress={() => handleStatChange('diet_type', diet.id)}
-                    className={`flex-row justify-between items-center p-3 border border-border-muted rounded-xl bg-white ${
-                      profile?.diet_type === diet.id ? 'border-accent-sage bg-[#F3F6F3]' : ''
+                    className={`flex-row justify-between items-center p-3 border border-border-muted rounded-xl bg-bg-card ${
+                      profile?.diet_type === diet.id ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : ''
                     } ${isRtl ? 'flex-row-reverse' : ''}`}
                   >
                     <Text className={`text-xs font-inter-medium ${profile?.diet_type === diet.id ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
                       {isRtl ? diet.label_ar : diet.label_en}
                     </Text>
                     {profile?.diet_type === diet.id && (
-                      <Ionicons name="checkmark" size={16} color="#4C6E58" />
+                      <Ionicons name="checkmark" size={16} color={isDark ? '#5C856C' : '#4C6E58'} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -1111,7 +1277,7 @@ export default function ProfileScreen() {
             </View>
 
             {/* Common Exclusions */}
-            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+            <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
               <Text className={`text-xs font-outfit-semibold text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
                 {isRtl ? 'الحساسية واستبعادات الشائعة' : 'Common Exclusions / Allergies'}
               </Text>
@@ -1133,8 +1299,8 @@ export default function ProfileScreen() {
                           : [...currentExclusions, excl.id];
                         handleStatChange('exclusions', newList);
                       }}
-                      className={`px-3 py-2 border rounded-full bg-white flex-row items-center gap-1 ${
-                        isSelected ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                      className={`px-3 py-2 border rounded-full bg-bg-card flex-row items-center gap-1 ${
+                        isSelected ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
                       } ${isRtl ? 'flex-row-reverse' : ''}`}
                     >
                       <Ionicons
@@ -1152,7 +1318,7 @@ export default function ProfileScreen() {
             </View>
 
             {/* Custom Excluded Ingredients */}
-            <View className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm">
+            <View className="bg-bg-card rounded-3xl border border-border-muted p-5 shadow-sm">
               <Text className={`text-xs font-outfit-semibold text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
                 {isRtl ? 'المكونات والأطعمة المستبعدة' : 'Disliked / Excluded Foods'}
               </Text>
@@ -1160,7 +1326,7 @@ export default function ProfileScreen() {
               {/* Add Custom Ingredient Input */}
               <View className={`flex-row gap-2 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <TextInput
-                  className={`flex-1 bg-white border border-border-muted rounded-xl px-3 py-2 font-inter text-xs text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`flex-1 bg-bg-card border border-border-muted rounded-xl px-3 py-2 font-inter text-xs text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                   placeholder={isRtl ? 'مثال: خبز، أرز، سمك...' : 'e.g. Bread, Rice, Fish...'}
                   placeholderTextColor="#9CA19E"
                   value={newIngredient}
@@ -1198,7 +1364,7 @@ export default function ProfileScreen() {
                       }}
                       className="p-0.5"
                     >
-                      <Ionicons name="close-circle" size={14} color="#626A66" />
+                      <Ionicons name="close-circle" size={14} color={isDark ? '#8A9690' : '#626A66'} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -1220,11 +1386,11 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowMacroModal(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
           {/* Modal Header */}
-          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
             <TouchableOpacity onPress={() => setShowMacroModal(false)} className="p-1">
-              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color={isDark ? '#E5EAE5' : '#1A1E1C'} />
             </TouchableOpacity>
             <Text className="text-base font-outfit-bold text-text-primary">{t.adjustMacros}</Text>
             <View className="w-10" />
@@ -1269,7 +1435,7 @@ export default function ProfileScreen() {
               {/* Carbs */}
               <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <Text className="text-xs font-outfit-semibold text-text-muted">{t.carbsPercent}</Text>
-                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-white px-2">
+                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-bg-card px-2">
                   <TextInput
                     className="flex-1 py-2 font-inter text-sm text-text-primary text-center"
                     keyboardType="numeric"
@@ -1287,7 +1453,7 @@ export default function ProfileScreen() {
               {/* Protein */}
               <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <Text className="text-xs font-outfit-semibold text-text-muted">{t.proteinPercent}</Text>
-                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-white px-2">
+                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-bg-card px-2">
                   <TextInput
                     className="flex-1 py-2 font-inter text-sm text-text-primary text-center"
                     keyboardType="numeric"
@@ -1305,7 +1471,7 @@ export default function ProfileScreen() {
               {/* Fats */}
               <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <Text className="text-xs font-outfit-semibold text-text-muted">{t.fatsPercent}</Text>
-                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-white px-2">
+                <View className="w-24 flex-row items-center border border-border-muted rounded-xl bg-bg-card px-2">
                   <TextInput
                     className="flex-1 py-2 font-inter text-sm text-text-primary text-center"
                     keyboardType="numeric"
@@ -1382,20 +1548,20 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowFaqModal(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
           {/* Modal Header */}
-          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
             <TouchableOpacity onPress={() => setShowFaqModal(false)} className="p-1">
-              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color={isDark ? '#E5EAE5' : '#1A1E1C'} />
             </TouchableOpacity>
             <Text className="text-base font-outfit-bold text-text-primary">{t.helpFAQ}</Text>
             <View className="w-10" />
           </View>
 
           {/* Search Input Section */}
-          <View className="px-5 pt-4 bg-white pb-3 border-b border-border-muted">
-            <View className={`flex-row items-center bg-[#F0F2F0] rounded-2xl px-4 py-2.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <Ionicons name="search-outline" size={20} color="#626A66" />
+          <View className="px-5 pt-4 bg-bg-card pb-3 border-b border-border-muted">
+            <View className={`flex-row items-center bg-[#F0F2F0] dark:bg-border-muted rounded-2xl px-4 py-2.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Ionicons name="search-outline" size={20} color={isDark ? '#8A9690' : '#626A66'} />
               <TextInput
                 value={faqSearchQuery}
                 onChangeText={setFaqSearchQuery}
@@ -1407,7 +1573,7 @@ export default function ProfileScreen() {
               />
               {faqSearchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setFaqSearchQuery('')}>
-                  <Ionicons name="close-circle" size={18} color="#9CA19E" />
+                  <Ionicons name="close-circle" size={18} color={isDark ? '#8A9690' : '#9CA19E'} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1421,7 +1587,7 @@ export default function ProfileScreen() {
                   filteredFaqs.map((faq) => {
                     const isExpanded = expandedFaqQuestion === faq.id;
                     return (
-                      <View key={faq.id} className="bg-white rounded-3xl border border-border-muted overflow-hidden shadow-sm">
+                      <View key={faq.id} className="bg-bg-card rounded-3xl border border-border-muted overflow-hidden shadow-sm">
                         <TouchableOpacity
                           onPress={() => setExpandedFaqQuestion(isExpanded ? null : faq.id)}
                           className={`flex-row justify-between items-center p-5 ${isRtl ? 'flex-row-reverse' : ''}`}
@@ -1438,7 +1604,7 @@ export default function ProfileScreen() {
                           <Ionicons 
                             name={isExpanded ? "chevron-up" : "chevron-down"} 
                             size={18} 
-                            color="#626A66" 
+                            color={isDark ? '#8A9690' : '#626A66'} 
                           />
                         </TouchableOpacity>
                         
@@ -1470,7 +1636,7 @@ export default function ProfileScreen() {
                 {faqCategories.map((category, catIdx) => {
                   const isCategoryExpanded = expandedFaqCategory === catIdx;
                   return (
-                    <View key={catIdx} className="bg-white rounded-3xl border border-border-muted overflow-hidden shadow-sm">
+                    <View key={catIdx} className="bg-bg-card rounded-3xl border border-border-muted overflow-hidden shadow-sm">
                       <TouchableOpacity
                         onPress={() => setExpandedFaqCategory(isCategoryExpanded ? null : catIdx)}
                         className={`flex-row justify-between items-center p-5 ${isRtl ? 'flex-row-reverse' : ''}`}
@@ -1480,7 +1646,7 @@ export default function ProfileScreen() {
                           <Ionicons 
                             name={category.icon as any} 
                             size={20} 
-                            color="#4C6E58" 
+                            color={isDark ? '#5C856C' : '#4C6E58'} 
                             style={isRtl ? { marginLeft: 12 } : { marginRight: 12 }} 
                           />
                           <Text className="text-sm font-outfit-bold text-text-primary">
@@ -1490,17 +1656,17 @@ export default function ProfileScreen() {
                         <Ionicons 
                           name={isCategoryExpanded ? "chevron-up" : "chevron-down"} 
                           size={18} 
-                          color="#626A66" 
+                          color={isDark ? '#8A9690' : '#626A66'} 
                         />
                       </TouchableOpacity>
 
                       {isCategoryExpanded && (
-                        <View className="px-5 pb-5 border-t border-[#F0F2F0] pt-2">
+                        <View className="px-5 pb-5 border-t border-[#F0F2F0] dark:border-border-muted pt-2">
                           {category.items.map((item, itemIdx) => {
                             const questionId = `${catIdx}-${itemIdx}`;
                             const isQuestionExpanded = expandedFaqQuestion === questionId;
                             return (
-                              <View key={itemIdx} className="border-b border-[#F0F2F0] last:border-b-0 py-3">
+                              <View key={itemIdx} className="border-b border-[#F0F2F0] dark:border-border-muted last:border-b-0 py-3">
                                 <TouchableOpacity
                                   onPress={() => setExpandedFaqQuestion(isQuestionExpanded ? null : questionId)}
                                   className={`flex-row justify-between items-center py-2 ${isRtl ? 'flex-row-reverse' : ''}`}
@@ -1512,7 +1678,7 @@ export default function ProfileScreen() {
                                   <Ionicons 
                                     name={isQuestionExpanded ? "chevron-up" : "chevron-down"} 
                                     size={16} 
-                                    color="#9CA19E" 
+                                    color={isDark ? '#8A9690' : '#9CA19E'} 
                                   />
                                 </TouchableOpacity>
 
@@ -1545,7 +1711,7 @@ export default function ProfileScreen() {
         onRequestClose={() => setShowDeleteModal(false)}
       >
         <View className="flex-1 justify-center items-center bg-black/50 px-6">
-          <View className="bg-white rounded-3xl p-6 w-full max-w-sm border border-border-muted shadow-xl">
+          <View className="bg-bg-card rounded-3xl p-6 w-full max-w-sm border border-border-muted shadow-xl">
             <View className="items-center mb-4">
               <View className="w-12 h-12 bg-red-100 rounded-full items-center justify-center mb-3">
                 <Ionicons name="alert-circle" size={28} color="#DC2626" />
@@ -1559,14 +1725,25 @@ export default function ProfileScreen() {
             </Text>
             <View className="gap-y-2">
               <TouchableOpacity
-                onPress={() => {
+                onPress={async () => {
                   setShowDeleteModal(false);
-                  useDiaryStore.getState().resetAll();
-                  if (isSignedIn) signOut();
-                  Alert.alert(
-                    isRtl ? 'تم حذف الحساب' : 'Account Deleted', 
-                    isRtl ? 'تم حذف حسابك وبياناتك بنجاح.' : 'Your account and history have been deleted successfully.'
-                  );
+                  try {
+                    if (isSignedIn) {
+                      await deleteAccount();
+                    } else {
+                      useDiaryStore.getState().resetAll();
+                    }
+                    Alert.alert(
+                      isRtl ? 'تم حذف الحساب' : 'Account Deleted', 
+                      isRtl ? 'تم حذف حسابك وبياناتك بنجاح.' : 'Your account and history have been deleted successfully.'
+                    );
+                  } catch (err) {
+                    console.error('Error deleting account:', err);
+                    Alert.alert(
+                      isRtl ? 'خطأ' : 'Error',
+                      isRtl ? 'حدث خطأ أثناء حذف الحساب.' : 'An error occurred while deleting the account.'
+                    );
+                  }
                 }}
                 className="bg-red-600 rounded-xl py-3 items-center justify-center"
               >
@@ -1589,11 +1766,11 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowPrivacyModal(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
           {/* Modal Header */}
-          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
             <TouchableOpacity onPress={() => setShowPrivacyModal(false)} className="p-1">
-              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color={isDark ? '#E5EAE5' : '#1A1E1C'} />
             </TouchableOpacity>
             <Text className="text-base font-outfit-bold text-text-primary">{t.privacyPolicy}</Text>
             <View className="w-10" />
@@ -1608,7 +1785,7 @@ export default function ProfileScreen() {
               {privacySections.map((section) => (
                 <View 
                   key={section.id} 
-                  className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm"
+                  className="bg-bg-card rounded-3xl border border-border-muted p-5 shadow-sm"
                 >
                   {/* Section Title with Icon */}
                   <View className={`flex-row items-center mb-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -1637,7 +1814,7 @@ export default function ProfileScreen() {
 
                   {/* Optional Bullet Points */}
                   {((isRtl ? section.bullets_ar : section.bullets_en) && (isRtl ? section.bullets_ar : section.bullets_en)!.length > 0) && (
-                    <View className="mt-3.5 gap-y-2 border-t border-[#F0F2F0] pt-3.5">
+                    <View className="mt-3.5 gap-y-2 border-t border-[#F0F2F0] dark:border-border-muted pt-3.5">
                       {(isRtl ? section.bullets_ar : section.bullets_en)!.map((bullet, index) => (
                         <View 
                           key={index} 
@@ -1666,11 +1843,11 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowTermsModal(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
           {/* Modal Header */}
-          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
             <TouchableOpacity onPress={() => setShowTermsModal(false)} className="p-1">
-              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color={isDark ? '#E5EAE5' : '#1A1E1C'} />
             </TouchableOpacity>
             <Text className="text-base font-outfit-bold text-text-primary">{t.termsOfService}</Text>
             <View className="w-10" />
@@ -1685,7 +1862,7 @@ export default function ProfileScreen() {
               {termsSections.map((section) => (
                 <View 
                   key={section.id} 
-                  className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm"
+                  className="bg-bg-card rounded-3xl border border-border-muted p-5 shadow-sm"
                 >
                   {/* Section Title with Icon */}
                   <View className={`flex-row items-center mb-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -1714,7 +1891,7 @@ export default function ProfileScreen() {
 
                   {/* Optional Bullet Points */}
                   {((isRtl ? section.bullets_ar : section.bullets_en) && (isRtl ? section.bullets_ar : section.bullets_en)!.length > 0) && (
-                    <View className="mt-3.5 gap-y-2 border-t border-[#F0F2F0] pt-3.5">
+                    <View className="mt-3.5 gap-y-2 border-t border-[#F0F2F0] dark:border-border-muted pt-3.5">
                       {(isRtl ? section.bullets_ar : section.bullets_en)!.map((bullet, index) => (
                         <View 
                           key={index} 

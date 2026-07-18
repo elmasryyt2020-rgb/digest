@@ -2,6 +2,9 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import PDFDocument from "npm:pdfkit";
 import reshaper from "npm:arabic-persian-reshaper@1.0.1";
+import { decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { amiriRegularBase64 } from "./fonts/Amiri-Regular.ts";
+import { amiriBoldBase64 } from "./fonts/Amiri-Bold.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,7 +47,7 @@ function fixArabic(text: string, isAr: boolean): string {
   });
 }
 
-// Module-level cache for fonts to avoid disk I/O on every request
+// Module-level cache for fonts to avoid disk I/O and memory fragmentation on every request
 let fontRegularBytes: Uint8Array | null = null;
 let fontBoldBytes: Uint8Array | null = null;
 
@@ -251,12 +254,12 @@ Provide ONLY the response without any formatting, markdown, or preambles.`;
     const chunks: Uint8Array[] = [];
     doc.on('data', (chunk: Uint8Array) => chunks.push(chunk));
 
-    // Register Custom Fonts for Arabic / English support from local cache
+    // Register Custom Fonts for Arabic / English support from local base64 cache
     if (!fontRegularBytes) {
-      fontRegularBytes = await Deno.readFile(new URL("./fonts/Amiri-Regular.ttf", import.meta.url));
+      fontRegularBytes = decode(amiriRegularBase64);
     }
     if (!fontBoldBytes) {
-      fontBoldBytes = await Deno.readFile(new URL("./fonts/Amiri-Bold.ttf", import.meta.url));
+      fontBoldBytes = decode(amiriBoldBase64);
     }
     doc.registerFont('Amiri', fontRegularBytes);
     doc.registerFont('Amiri-Bold', fontBoldBytes);
