@@ -13,10 +13,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring, interpolateColor } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, interpolateColor, Easing } from 'react-native-reanimated';
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { PresstoButton } from '@/components/PresstoButton';
+import { faqCategories } from '@/data/faqData';
+import { privacySections } from '@/data/privacyData';
 
 // Helper conversions for Ft/In and Cm
 const cmToFtIn = (cm: number) => {
@@ -48,12 +50,20 @@ function SegmentedControl<T extends string>({ options, selectedValue, onChange, 
   const orderedOptions = isRtl ? [...options].reverse() : options;
   const activeIndex = orderedOptions.findIndex(o => o.value === selectedValue);
   const translateX = useSharedValue(0);
+  const isFirstLayout = useSharedValue(true);
 
-  useEffect(() => {
-    if (containerWidth > 0 && activeIndex !== -1) {
-      translateX.value = withSpring(activeIndex * itemWidth, { damping: 20, stiffness: 220 });
+  if (containerWidth > 0 && activeIndex !== -1) {
+    const targetX = activeIndex * itemWidth;
+    if (isFirstLayout.value) {
+      translateX.value = targetX;
+      isFirstLayout.value = false;
+    } else {
+      translateX.value = withTiming(targetX, {
+        duration: 200,
+        easing: Easing.out(Easing.quad),
+      });
     }
-  }, [activeIndex, containerWidth, itemWidth]);
+  }
 
   const indicatorStyle = useAnimatedStyle(() => {
     return {
@@ -118,9 +128,10 @@ interface AnimatedSwitchProps {
 function AnimatedSwitch({ value, onValueChange }: AnimatedSwitchProps) {
   const translateX = useSharedValue(value ? 18 : 2);
 
-  useEffect(() => {
-    translateX.value = withSpring(value ? 18 : 2, { damping: 15, stiffness: 220 });
-  }, [value]);
+  translateX.value = withTiming(value ? 18 : 2, {
+    duration: 200,
+    easing: Easing.out(Easing.quad),
+  });
 
   const trackStyle = useAnimatedStyle(() => {
     const backgroundColor = interpolateColor(
@@ -168,8 +179,7 @@ export default function ProfileScreen() {
   // Zustand State
   const profile = useDiaryStore((state) => state.profile);
   const setProfile = useDiaryStore((state) => state.setProfile);
-  const isTrial = useDiaryStore((state) => state.isTrial);
-  const triggerClerkSignUp = useDiaryStore((state) => state.triggerClerkSignUp);
+  const triggerSignUp = useDiaryStore((state) => state.triggerSignUp);
 
   const user = useAuthStore((state) => state.user);
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
@@ -191,6 +201,21 @@ export default function ProfileScreen() {
 
   const [showFaqModal, setShowFaqModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+
+  // FAQ States
+  const [faqSearchQuery, setFaqSearchQuery] = useState('');
+  const [expandedFaqCategory, setExpandedFaqCategory] = useState<number | null>(null);
+  const [expandedFaqQuestion, setExpandedFaqQuestion] = useState<string | null>(null);
+
+  // Reset FAQ states when modal closes or opens
+  useEffect(() => {
+    if (!showFaqModal) {
+      setFaqSearchQuery('');
+      setExpandedFaqCategory(null);
+      setExpandedFaqQuestion(null);
+    }
+  }, [showFaqModal]);
 
   // Local Biometrics Form Texts to avoid roundtrip truncation
   const [weightText, setWeightText] = useState('');
@@ -230,11 +255,11 @@ export default function ProfileScreen() {
     pdfSuccess: isRtl ? 'تم إنشاء التقرير بنجاح!' : 'Report generated successfully!',
     pdfDownload: isRtl ? 'تحميل تقرير PDF' : 'Download PDF',
     account: isRtl ? 'الحساب' : 'Account Status',
-    trialMode: isRtl ? 'نسخة تجريبية (محلية)' : 'Trial Account (Local Cache)',
-    trialMsg: isRtl ? 'سجل حسابك لحفظ بياناتك سحابياً وتصدير التقارير.' : 'Register to backup your logs and download PDF exports.',
+    trialMode: isRtl ? 'حساب ضيف' : 'Guest Account',
+    trialMsg: isRtl ? 'يرجى تسجيل الدخول أو إنشاء حساب لحفظ بياناتك.' : 'Please sign in or register to back up your data.',
     registerBtn: isRtl ? 'إنشاء حساب / تسجيل الدخول' : 'Sign Up / Sign In',
     signOutBtn: isRtl ? 'تسجيل الخروج' : 'Sign Out',
-    activeUser: isRtl ? 'حساب نشط' : 'Premium Account',
+    activeUser: isRtl ? 'حساب نشط' : 'Active Account',
 
     // New keys
     goalWeight: isRtl ? 'الوزن المستهدف' : 'Goal Weight',
@@ -312,8 +337,8 @@ export default function ProfileScreen() {
   };
 
   const handleExportPDF = async () => {
-    if (isTrial) {
-      triggerClerkSignUp();
+    if (!isSignedIn) {
+      triggerSignUp();
       return;
     }
 
@@ -347,6 +372,30 @@ export default function ProfileScreen() {
     return `${goalWeight} kg`;
   };
 
+  // Filter FAQs based on search query
+  const getFilteredFAQs = () => {
+    if (!faqSearchQuery.trim()) return null;
+    const query = faqSearchQuery.toLowerCase().trim();
+    const results: { categoryName: string; item: any; id: string }[] = [];
+    
+    faqCategories.forEach((cat, catIdx) => {
+      cat.items.forEach((item, itemIdx) => {
+        const qText = (isRtl ? item.q_ar : item.q_en).toLowerCase();
+        const aText = (isRtl ? item.a_ar : item.a_en).toLowerCase();
+        if (qText.includes(query) || aText.includes(query)) {
+          results.push({
+            categoryName: isRtl ? cat.category_ar : cat.category_en,
+            item,
+            id: `${catIdx}-${itemIdx}`
+          });
+        }
+      });
+    });
+    return results;
+  };
+
+  const filteredFaqs = getFilteredFAQs();
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
       {/* Header */}
@@ -377,24 +426,7 @@ export default function ProfileScreen() {
             {isSignedIn && user ? user.email : (isRtl ? 'سجل لحفظ بياناتك سحابياً' : 'Sign up to backup logs')}
           </Text>
 
-          {/* Account Status Badge */}
-          <View className="mt-3 flex-row items-center">
-            <View className={`flex-row items-center px-3 py-1 rounded-full ${
-              isSignedIn ? 'bg-accent-mint border border-[#C3D9B6]' : 'bg-orange-50 border border-orange-200'
-            }`}>
-              <Ionicons 
-                name={isSignedIn ? "shield-checkmark" : "warning-outline"} 
-                size={12} 
-                color={isSignedIn ? "#4C6E58" : "#E58C73"} 
-                style={isRtl ? { marginLeft: 4 } : { marginRight: 4 }} 
-              />
-              <Text className={`text-[10px] font-outfit-bold ${
-                isSignedIn ? 'text-accent-sage' : 'text-nutrient-calories'
-              }`}>
-                {isSignedIn ? t.activeUser : t.trialMode}
-              </Text>
-            </View>
-          </View>
+
 
           {/* Goal Caption Summary */}
           <Text className="text-xs font-inter-regular text-text-muted mt-4 bg-bg-base px-4 py-2 rounded-xl text-center overflow-hidden">
@@ -406,7 +438,7 @@ export default function ProfileScreen() {
 
           {!isSignedIn && (
             <PresstoButton
-              onPress={triggerClerkSignUp}
+              onPress={triggerSignUp}
               className="bg-accent-sage rounded-xl py-2.5 w-full items-center mt-4"
             >
               <Text className="text-white text-xs font-outfit-bold">{t.registerBtn}</Text>
@@ -442,10 +474,12 @@ export default function ProfileScreen() {
           ) : (
             <PresstoButton 
               onPress={handleExportPDF} 
-              className="bg-accent-sage rounded-xl py-3 flex-row items-center justify-center"
+              className="bg-accent-sage rounded-xl py-3"
             >
-              <Ionicons name="document-text-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text className="text-white text-xs font-outfit-bold">{t.pdfBtn}</Text>
+              <View className="flex-row items-center justify-center">
+                <Ionicons name="document-text-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text className="text-white text-xs font-outfit-bold">{t.pdfBtn}</Text>
+              </View>
             </PresstoButton>
           )}
         </View>
@@ -906,7 +940,7 @@ export default function ProfileScreen() {
 
             {/* Privacy Policy */}
             <TouchableOpacity 
-              onPress={() => Alert.alert(isRtl ? 'سياسة الخصوصية' : 'Privacy Policy', isRtl ? 'سيتم فتح سياسة الخصوصية...' : 'Opening Privacy Policy...')} 
+              onPress={() => setShowPrivacyModal(true)} 
               className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
             >
               <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -1022,19 +1056,6 @@ export default function ProfileScreen() {
           </View>
 
           <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-            {/* Edit Name */}
-            <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-              <Text className={`text-xs font-outfit-semibold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
-                {isRtl ? 'الاسم الشخصي' : 'Profile Name'}
-              </Text>
-              <TextInput
-                className={`bg-white border border-border-muted rounded-xl px-3 py-2.5 font-inter text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
-                value={profile?.name || ''}
-                placeholder={isRtl ? 'أدخل اسمك...' : 'Enter your name...'}
-                onChangeText={(text) => handleStatChange('name', text)}
-              />
-            </View>
-
             {/* Diet Type */}
             <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
               <Text className={`text-xs font-outfit-semibold text-text-primary mb-3.5 ${isRtl ? 'text-right' : 'text-left'}`}>
@@ -1348,44 +1369,147 @@ export default function ProfileScreen() {
             <View className="w-10" />
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-            <View className="gap-y-4">
-              {[
-                {
-                  q_en: "How is my daily calorie target calculated?",
-                  q_ar: "كيف يتم حساب السعرات الحرارية اليومية المستهدفة؟",
-                  a_en: "We use the Mifflin-St Jeor equation to estimate your Resting Metabolic Rate (BMR), then multiply it by your activity factor. Your health goal (e.g. lose weight) subtracts or adds calories to compute the final target.",
-                  a_ar: "نستخدم معادلة ميفلين-سانت جيور لتقدير معدل الأيض الأساسي (BMR)، ثم نضربه في عامل النشاط البدني. يطرح هدفك الصحي (مثل إنقاص الوزن) أو يضيف سعرات حرارية لحساب الهدف النهائي."
-                },
-                {
-                  q_en: "What are macronutrient ratios?",
-                  q_ar: "ما هي نسب المغذيات الكبرى؟",
-                  a_en: "Macronutrients are Carbs, Protein, and Fats. Adjusting their ratios changes how your daily calories are distributed. A balanced profile is 40% Carbs, 30% Protein, and 30% Fats.",
-                  a_ar: "المغذيات الكبرى هي الكربوهيدرات والبروتينات والدهون. يؤدي ضبط نسبها إلى تغيير كيفية توزيع السعرات الحرارية اليومية. النسب المتوازنة هي ٤٠٪ كربوهيدرات، ٣٠٪ بروتين، ٣٠٪ دهون."
-                },
-                {
-                  q_en: "How does the water tracker work?",
-                  q_ar: "كيف يعمل متتبع شرب الماء؟",
-                  a_en: "Your baseline water target is calculated at 35ml per kg of body weight. You can log water in milliliters or fluid ounces, depending on your preferred unit preference.",
-                  a_ar: "يتم حساب هدفك المائي الأساسي عند ٣٥ مل لكل كجم من وزن الجسم. يمكنك تسجيل استهلاك المياه بالملليلتر أو الأوقية السائلة، حسب تفضيل الوحدة الخاص بك."
-                },
-                {
-                  q_en: "How are MET activity scores calculated?",
-                  q_ar: "كيف يتم حساب نقاط نشاط MET؟",
-                  a_en: "MET (Metabolic Equivalent of Task) scores estimate calorie burn. Calories burned = MET value × body weight (kg) × duration (hours). This ensures your workouts accurately reflect actual energy expenditure.",
-                  a_ar: "تقدّر نقاط مكافئ الأيض للمهمة (MET) حرق السعرات الحرارية. السعرات الحرارية المحروقة = قيمة MET × وزن الجسم (كجم) × المدة (بالساعات). هذا يضمن أن تعكس تمارينك الرياضية بدقة استهلاك الطاقة الفعلي."
-                }
-              ].map((faq, index) => (
-                <View key={index} className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm">
-                  <Text className={`text-sm font-outfit-bold text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {isRtl ? faq.q_ar : faq.q_en}
-                  </Text>
-                  <Text className={`text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {isRtl ? faq.a_ar : faq.a_en}
-                  </Text>
-                </View>
-              ))}
+          {/* Search Input Section */}
+          <View className="px-5 pt-4 bg-white pb-3 border-b border-border-muted">
+            <View className={`flex-row items-center bg-[#F0F2F0] rounded-2xl px-4 py-2.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Ionicons name="search-outline" size={20} color="#626A66" />
+              <TextInput
+                value={faqSearchQuery}
+                onChangeText={setFaqSearchQuery}
+                placeholder={isRtl ? 'ابحث في الأسئلة الشائعة...' : 'Search FAQs...'}
+                placeholderTextColor="#9CA19E"
+                className={`flex-1 text-xs font-inter-regular text-text-primary px-2.5 py-1 ${
+                  isRtl ? 'text-right' : 'text-left'
+                }`}
+              />
+              {faqSearchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setFaqSearchQuery('')}>
+                  <Ionicons name="close-circle" size={18} color="#9CA19E" />
+                </TouchableOpacity>
+              )}
             </View>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+            {/* If user is searching */}
+            {faqSearchQuery.trim().length > 0 ? (
+              <View className="gap-y-4">
+                {filteredFaqs && filteredFaqs.length > 0 ? (
+                  filteredFaqs.map((faq) => {
+                    const isExpanded = expandedFaqQuestion === faq.id;
+                    return (
+                      <View key={faq.id} className="bg-white rounded-3xl border border-border-muted overflow-hidden shadow-sm">
+                        <TouchableOpacity
+                          onPress={() => setExpandedFaqQuestion(isExpanded ? null : faq.id)}
+                          className={`flex-row justify-between items-center p-5 ${isRtl ? 'flex-row-reverse' : ''}`}
+                          activeOpacity={0.7}
+                        >
+                          <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'} px-1`}>
+                            <Text className="text-[10px] font-outfit-bold text-accent-sage mb-1 uppercase tracking-wider">
+                              {faq.categoryName}
+                            </Text>
+                            <Text className={`text-xs font-outfit-bold text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                              {isRtl ? faq.item.q_ar : faq.item.q_en}
+                            </Text>
+                          </View>
+                          <Ionicons 
+                            name={isExpanded ? "chevron-up" : "chevron-down"} 
+                            size={18} 
+                            color="#626A66" 
+                          />
+                        </TouchableOpacity>
+                        
+                        {isExpanded && (
+                          <View className="bg-[#F8F9F8] px-5 py-4 border-t border-border-muted">
+                            <Text className={`text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}>
+                              {isRtl ? faq.item.a_ar : faq.item.a_en}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })
+                ) : (
+                  <View className="items-center justify-center py-10">
+                    <Ionicons name="search-outline" size={48} color="#D3B177" className="mb-3 opacity-60" />
+                    <Text className="text-sm font-outfit-bold text-text-primary text-center">
+                      {isRtl ? 'لا توجد نتائج مطابقة' : 'No results found'}
+                    </Text>
+                    <Text className="text-xs font-inter-regular text-text-muted text-center mt-1">
+                      {isRtl ? `لم نجد أي نتائج لـ "${faqSearchQuery}"` : `We couldn't find any results for "${faqSearchQuery}"`}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              /* If query is empty, show categories */
+              <View className="gap-y-4">
+                {faqCategories.map((category, catIdx) => {
+                  const isCategoryExpanded = expandedFaqCategory === catIdx;
+                  return (
+                    <View key={catIdx} className="bg-white rounded-3xl border border-border-muted overflow-hidden shadow-sm">
+                      <TouchableOpacity
+                        onPress={() => setExpandedFaqCategory(isCategoryExpanded ? null : catIdx)}
+                        className={`flex-row justify-between items-center p-5 ${isRtl ? 'flex-row-reverse' : ''}`}
+                        activeOpacity={0.7}
+                      >
+                        <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                          <Ionicons 
+                            name={category.icon as any} 
+                            size={20} 
+                            color="#4C6E58" 
+                            style={isRtl ? { marginLeft: 12 } : { marginRight: 12 }} 
+                          />
+                          <Text className="text-sm font-outfit-bold text-text-primary">
+                            {isRtl ? category.category_ar : category.category_en}
+                          </Text>
+                        </View>
+                        <Ionicons 
+                          name={isCategoryExpanded ? "chevron-up" : "chevron-down"} 
+                          size={18} 
+                          color="#626A66" 
+                        />
+                      </TouchableOpacity>
+
+                      {isCategoryExpanded && (
+                        <View className="px-5 pb-5 border-t border-[#F0F2F0] pt-2">
+                          {category.items.map((item, itemIdx) => {
+                            const questionId = `${catIdx}-${itemIdx}`;
+                            const isQuestionExpanded = expandedFaqQuestion === questionId;
+                            return (
+                              <View key={itemIdx} className="border-b border-[#F0F2F0] last:border-b-0 py-3">
+                                <TouchableOpacity
+                                  onPress={() => setExpandedFaqQuestion(isQuestionExpanded ? null : questionId)}
+                                  className={`flex-row justify-between items-center py-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+                                  activeOpacity={0.6}
+                                >
+                                  <Text className={`flex-1 text-xs font-outfit-semibold text-text-primary pr-3 ${isRtl ? 'text-right pl-3 pr-0' : 'text-left'}`}>
+                                    {isRtl ? item.q_ar : item.q_en}
+                                  </Text>
+                                  <Ionicons 
+                                    name={isQuestionExpanded ? "chevron-up" : "chevron-down"} 
+                                    size={16} 
+                                    color="#9CA19E" 
+                                  />
+                                </TouchableOpacity>
+
+                                {isQuestionExpanded && (
+                                  <View className="bg-[#F8F9F8] p-3.5 rounded-2xl mt-2 border border-border-muted">
+                                    <Text className={`text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}>
+                                      {isRtl ? item.a_ar : item.a_en}
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1434,6 +1558,78 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Privacy Policy Modal */}
+      <Modal
+        visible={showPrivacyModal}
+        animationType="slide"
+        onRequestClose={() => setShowPrivacyModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+          {/* Modal Header */}
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <TouchableOpacity onPress={() => setShowPrivacyModal(false)} className="p-1">
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+            </TouchableOpacity>
+            <Text className="text-base font-outfit-bold text-text-primary">{t.privacyPolicy}</Text>
+            <View className="w-10" />
+          </View>
+
+          {/* Privacy Policy Content */}
+          <ScrollView 
+            contentContainerStyle={{ padding: 20, paddingBottom: 60 }} 
+            showsVerticalScrollIndicator={false}
+          >
+            <View className="gap-y-6">
+              {privacySections.map((section) => (
+                <View 
+                  key={section.id} 
+                  className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm"
+                >
+                  {/* Section Title with Icon */}
+                  <View className={`flex-row items-center mb-3.5 gap-x-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <Ionicons name={section.icon as any} size={20} color="#4A5E53" />
+                    <Text className={`text-sm font-outfit-bold text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                      {isRtl ? section.title_ar : section.title_en}
+                    </Text>
+                  </View>
+
+                  {/* Section Paragraphs */}
+                  <View className="gap-y-3">
+                    {(isRtl ? section.paragraphs_ar : section.paragraphs_en).map((para, index) => (
+                      <Text 
+                        key={index} 
+                        className={`text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}
+                      >
+                        {para}
+                      </Text>
+                    ))}
+                  </View>
+
+                  {/* Optional Bullet Points */}
+                  {((isRtl ? section.bullets_ar : section.bullets_en) && (isRtl ? section.bullets_ar : section.bullets_en)!.length > 0) && (
+                    <View className="mt-3.5 gap-y-2 border-t border-[#F0F2F0] pt-3.5">
+                      {(isRtl ? section.bullets_ar : section.bullets_en)!.map((bullet, index) => (
+                        <View 
+                          key={index} 
+                          className={`flex-row items-start ${isRtl ? 'flex-row-reverse' : ''}`}
+                        >
+                          <Text className="text-[#4A5E53] px-2">•</Text>
+                          <Text 
+                            className={`flex-1 text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}
+                          >
+                            {bullet}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
     </SafeAreaView>
   );
