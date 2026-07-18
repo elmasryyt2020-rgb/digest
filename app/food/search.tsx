@@ -21,6 +21,7 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { StatusBar } from 'expo-status-bar';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { PresstoButton } from '@/components/PresstoButton';
@@ -826,32 +827,35 @@ export default function FoodSearchScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: mode === 'search' ? '#F8F9F8' : '#1A1E1C' }}>
+      <StatusBar style={mode === 'search' ? 'dark' : 'light'} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         
         {/* Header */}
-        <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <TouchableOpacity 
-            onPress={() => {
-              if (selectedFood && mode === 'search') {
-                setSelectedFood(null);
-              } else if (mode !== 'search') {
-                setMode('search');
-                setSelectedFood(null);
-              } else {
-                router.back();
-              }
-            }}
-            className="py-1.5 px-3 rounded-xl bg-[#EAECEB]"
-          >
-            <Text className="text-text-muted text-xs font-outfit-bold">{t.back}</Text>
-          </TouchableOpacity>
-          <Text className="text-base font-outfit-bold text-text-primary">{t.title} ({isRtl ? t[mealType as keyof typeof t] : mealType})</Text>
-          <View className="w-16" />
-        </View>
+        {mode === 'search' && (
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <TouchableOpacity 
+              onPress={() => {
+                if (selectedFood && mode === 'search') {
+                  setSelectedFood(null);
+                } else if (mode !== 'search') {
+                  setMode('search');
+                  setSelectedFood(null);
+                } else {
+                  router.back();
+                }
+              }}
+              className="py-1.5 px-3 rounded-xl bg-[#EAECEB]"
+            >
+              <Text className="text-text-muted text-xs font-outfit-bold">{t.back}</Text>
+            </TouchableOpacity>
+            <Text className="text-base font-outfit-bold text-text-primary">{t.title} ({isRtl ? t[mealType as keyof typeof t] : mealType})</Text>
+            <View className="w-16" />
+          </View>
+        )}
 
         {mode === 'search' && (
           <View className="flex-1 p-5">
@@ -1064,7 +1068,22 @@ export default function FoodSearchScreen() {
                         if (data) handleBarcodeDetected(data);
                       }}
                     />
-                    <View className="absolute top-0 left-0 right-0 bottom-0 justify-center items-center bg-black/40 rounded-2xl overflow-hidden">
+                    <View 
+                      style={{ 
+                        position: 'absolute', 
+                        top: 0, 
+                        left: 0, 
+                        right: 0, 
+                        bottom: 0, 
+                        justifyContent: 'center', 
+                        alignItems: 'center', 
+                        backgroundColor: 'rgba(0,0,0,0.4)', 
+                        borderRadius: 16, 
+                        overflow: 'hidden',
+                        zIndex: 10,
+                        elevation: 10
+                      }}
+                    >
                       <View className="w-[250] h-[250] border-2 border-white rounded-2xl relative overflow-hidden justify-center items-center bg-transparent">
                         <Animated.View className="w-full h-[2] bg-nutrient-calories absolute top-0 left-0 z-10" style={laserStyle} />
                         <View className="w-[200] h-[200] border-2 border-white/50 border-dashed rounded-lg" />
@@ -1092,8 +1111,16 @@ export default function FoodSearchScreen() {
         {/* AI Vision Viewport Mockup */}
         {mode === 'camera' && (
           <View className="flex-1 bg-[#1A1E1C]">
+            {/* Header info */}
+            <View className="flex-row items-center justify-between w-full mt-4 mb-6 px-6">
+              <Text className="text-white font-outfit-bold text-lg">{t.cameraTitle}</Text>
+              <TouchableOpacity onPress={() => setMode('search')} className="p-2">
+                <Ionicons name="close" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+
             {cameraState === 'idle' && (
-              <View className="flex-1 justify-center items-center">
+              <View className="flex-1 justify-center items-center pb-20">
                 <View className="w-[260] h-[260] rounded-full border-[4] border-border-muted border-dashed justify-center items-center mb-10">
                   <Ionicons name="camera" size={64} color="#EAECEB" />
                 </View>
