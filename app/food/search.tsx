@@ -9,6 +9,7 @@ import {
   Image,
   ActivityIndicator,
   Keyboard,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -553,7 +554,10 @@ export default function FoodSearchScreen() {
 
       const resJson = await response.json();
       if (resJson.status !== 1 || !resJson.product) {
-        alert(isRtl ? 'المنتج غير موجود. يرجى البحث يدوياً.' : 'Product not found. Please search manually.');
+        Alert.alert(
+          isRtl ? 'المنتج غير موجود' : 'Product Not Found',
+          isRtl ? 'المنتج غير موجود. يرجى البحث يدوياً.' : 'Product not found. Please search manually.'
+        );
         setMode('search');
         setIsProcessingBarcode(false);
         return;
@@ -589,9 +593,10 @@ export default function FoodSearchScreen() {
       setBarcodeState('detected');
     } catch (err) {
       console.error('Barcode scanning processing failed:', err);
-      alert(isRtl 
-        ? 'حدث خطأ في الشبكة. يرجى التحقق من اتصالك بالإنترنت.' 
-        : 'Network error. Please check your internet connection.');
+      Alert.alert(
+        isRtl ? 'خطأ في الاتصال' : 'Network Error',
+        isRtl ? 'حدث خطأ في الشبكة. يرجى التحقق من اتصالك بالإنترنت.' : 'Network error. Please check your internet connection.'
+      );
       setMode('search');
     } finally {
       setIsProcessingBarcode(false);
