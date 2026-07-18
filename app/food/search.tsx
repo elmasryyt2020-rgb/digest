@@ -1055,7 +1055,7 @@ export default function FoodSearchScreen() {
                   // Active Camera scanner
                   <View className="w-full flex-1 relative justify-center items-center overflow-hidden rounded-2xl">
                     <CameraView
-                      style={{ width: '100%', height: '80%', borderRadius: 16, overflow: 'hidden' }}
+                      style={{ width: '100%', height: '100%', borderRadius: 16, overflow: 'hidden' }}
                       facing="back"
                       barcodeScannerSettings={{
                         barcodeTypes: ['ean13', 'upc_a'],
@@ -1063,15 +1063,14 @@ export default function FoodSearchScreen() {
                       onBarcodeScanned={({ data }) => {
                         if (data) handleBarcodeDetected(data);
                       }}
-                    >
-                      <View className="flex-1 justify-center items-center bg-black/40">
-                        <View className="w-[250] h-[250] border-2 border-white rounded-2xl relative overflow-hidden justify-center items-center bg-transparent">
-                          <Animated.View className="w-full h-[2] bg-nutrient-calories absolute top-0 left-0 z-10" style={laserStyle} />
-                          <View className="w-[200] h-[200] border-2 border-white/50 border-dashed rounded-lg" />
-                          <Text className="color-white text-[11px] font-inter-medium absolute bottom-3">{t.scanBoxMsg}</Text>
-                        </View>
+                    />
+                    <View className="absolute top-0 left-0 right-0 bottom-0 justify-center items-center bg-black/40 rounded-2xl overflow-hidden">
+                      <View className="w-[250] h-[250] border-2 border-white rounded-2xl relative overflow-hidden justify-center items-center bg-transparent">
+                        <Animated.View className="w-full h-[2] bg-nutrient-calories absolute top-0 left-0 z-10" style={laserStyle} />
+                        <View className="w-[200] h-[200] border-2 border-white/50 border-dashed rounded-lg" />
+                        <Text className="color-white text-[11px] font-inter-medium absolute bottom-3">{t.scanBoxMsg}</Text>
                       </View>
-                    </CameraView>
+                    </View>
                   </View>
                 )}
               </View>

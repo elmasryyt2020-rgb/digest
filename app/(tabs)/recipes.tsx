@@ -88,9 +88,7 @@ export default function RecipesScreen() {
   const handleGenerateRecipe = () => {
     if (selectedIngredients.length < 2) return;
 
-    // Check trial limits
-    const allowed = incrementRecipesCount();
-    if (!allowed) return; // Blocked by trial, sign up modal opened
+    incrementRecipesCount();
 
     setIsGenerating(true);
     

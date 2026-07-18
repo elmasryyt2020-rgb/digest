@@ -70,7 +70,7 @@ The app focuses on a spacious, warm-alabaster aesthetic with deep natural forest
 ```sql
 -- 1. Profiles Table (Linked to Clerk User IDs)
 CREATE TABLE public.profiles (
-    id TEXT PRIMARY KEY, -- Clerk user_id string
+    id TEXT PRIMARY KEY, -- Clerk/Supabase user_id string
     email TEXT UNIQUE NOT NULL,
     display_name TEXT,
     language VARCHAR(5) DEFAULT 'ar',
@@ -86,6 +86,21 @@ CREATE TABLE public.profiles (
     target_carbs_g NUMERIC(5, 1) DEFAULT 200.0,
     target_fat_g NUMERIC(5, 1) DEFAULT 65.0,
     target_water_ml NUMERIC(6, 1) DEFAULT 2500.0,
+    diet_type VARCHAR(20) DEFAULT 'classic',
+    exclusions TEXT[] DEFAULT '{}',
+    disliked_ingredients TEXT[] DEFAULT '{}',
+    goal_weight_kg NUMERIC(5, 2),
+    unit_weight VARCHAR(10) DEFAULT 'kg',
+    unit_height VARCHAR(10) DEFAULT 'cm',
+    unit_water VARCHAR(10) DEFAULT 'ml',
+    reminder_meals BOOLEAN DEFAULT TRUE,
+    reminder_water BOOLEAN DEFAULT TRUE,
+    reminder_workout BOOLEAN DEFAULT TRUE,
+    macro_preset VARCHAR(20) DEFAULT 'balanced',
+    macro_carbs_pct INT DEFAULT 40,
+    macro_protein_pct INT DEFAULT 30,
+    macro_fat_pct INT DEFAULT 30,
+    app_theme VARCHAR(15) DEFAULT 'system',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

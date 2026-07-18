@@ -4,7 +4,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useDiaryStore } from '@/store/useDiaryStore';
-import { ClerkSignUpModal } from '@/components/ClerkSignUpModal';
+import { useAuthStore } from '@/store/useAuthStore';
+import { SupabaseSignUpModal } from '@/components/SupabaseSignUpModal';
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
 
 // Suppress Reanimated reading value during component render warnings from third-party libraries
@@ -48,6 +49,7 @@ export default function RootLayout() {
   });
 
   const initializeDefaultProfile = useDiaryStore((state) => state.initializeDefaultProfile);
+  const initializeAuth = useAuthStore((state) => state.initializeAuth);
 
   useEffect(() => {
     if (error) throw error;
@@ -55,8 +57,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loaded) {
-      // Initialize default user statistics on mount
+      // Initialize default user statistics and Supabase auth on mount
       initializeDefaultProfile();
+      initializeAuth();
       SplashScreen.hideAsync();
     }
   }, [loaded]);
@@ -78,8 +81,8 @@ export default function RootLayout() {
         <Stack.Screen name="food/search" options={{ headerShown: false }} />
       </Stack>
       
-      {/* Global Clerk SignUp Modal triggered when limits are reached */}
-      <ClerkSignUpModal />
+      {/* Global Supabase SignUp Modal triggered when limits are reached */}
+      <SupabaseSignUpModal />
     </KeyboardProvider>
   );
 }

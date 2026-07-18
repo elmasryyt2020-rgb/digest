@@ -1,12 +1,23 @@
-import React from 'react';
-import { Tabs } from 'expo-router';
+import React, { useEffect } from 'react';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { useDiaryStore } from '@/store/useDiaryStore';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function TabLayout() {
   const language = useDiaryStore((state) => state.profile?.language) || 'ar';
   const isRtl = language === 'ar';
+
+  const isSignedIn = useAuthStore((state) => state.isSignedIn);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isInitialized && !isSignedIn) {
+      router.replace('/');
+    }
+  }, [isSignedIn, isInitialized]);
 
   return (
     <Tabs

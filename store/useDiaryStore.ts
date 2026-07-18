@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Localization from 'expo-localization';
 import { RecipeType } from '@/data/localRecipes';
+import { supabase } from '@/lib/supabase';
+
 
 export interface UserProfile {
   name: string;
@@ -103,9 +105,10 @@ interface DiaryState {
   deleteWorkoutLog: (id: string) => void;
   incrementRecipesCount: () => boolean; // Returns true if allowed, false if blocked by trial
   setSignUpModalOpen: (open: boolean) => void;
-  triggerClerkSignUp: () => void;
+  triggerSignUp: () => void;
   addGeneratedRecipe: (recipe: RecipeType) => void;
   syncToSupabase: (userId: string) => Promise<void>;
+  fetchFromSupabase: (userId: string) => Promise<void>;
   resetAll: () => void;
 }
 
@@ -181,6 +184,24 @@ export function calculateNutrientTargets(profile: Omit<UserProfile, 'target_calo
     target_water_ml,
   };
 }
+
+const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  const r = Math.random() * 16 | 0;
+  return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+});
+
+const getCurrentUserId = async (): Promise<string | null> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user?.id || null;
+};
+
+const getOrGenerateUuid = (str: string) => {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return str;
+  }
+  return uuid();
+};
+
 
 export const useDiaryStore = create<DiaryState>()(
   persist(
@@ -283,33 +304,107 @@ export const useDiaryStore = create<DiaryState>()(
             },
           };
         });
+
+        // Sync to Supabase in background if logged in
+        (async () => {
+          try {
+            const userId = await getCurrentUserId();
+            if (userId) {
+              const profile = get().profile;
+              if (profile) {
+                const birthYear = new Date().getFullYear() - (profile.age || 28);
+                const date_of_birth = `${birthYear}-01-01`;
+
+                await supabase.from('profiles').upsert({
+                  id: userId,
+                  email: profile.email || '',
+                  display_name: profile.name || 'Guest',
+                  language: profile.language || 'ar',
+                  country: profile.country || 'EG',
+                  date_of_birth,
+                  gender: profile.gender || 'male',
+                  height_cm: profile.height_cm || 175,
+                  weight_kg: profile.weight_kg || 75,
+                  activity_level: profile.activity_level || 'moderately_active',
+                  health_goal: profile.health_goal || 'lose_weight',
+                  target_calories: profile.target_calories || 2000,
+                  target_protein_g: profile.target_protein_g || 120,
+                  target_carbs_g: profile.target_carbs_g || 200,
+                  target_fat_g: profile.target_fat_g || 65,
+                  target_water_ml: profile.target_water_ml || 2500,
+                  diet_type: profile.diet_type || 'classic',
+                  exclusions: profile.exclusions || [],
+                  disliked_ingredients: profile.disliked_ingredients || [],
+                  goal_weight_kg: profile.goal_weight_kg || null,
+                  unit_weight: profile.unit_weight || 'kg',
+                  unit_height: profile.unit_height || 'cm',
+                  unit_water: profile.unit_water || 'ml',
+                  reminder_meals: profile.reminder_meals !== undefined ? profile.reminder_meals : true,
+                  reminder_water: profile.reminder_water !== undefined ? profile.reminder_water : true,
+                  reminder_workout: profile.reminder_workout !== undefined ? profile.reminder_workout : true,
+                  macro_preset: profile.macro_preset || 'balanced',
+                  macro_carbs_pct: profile.macro_carbs_pct || 40,
+                  macro_protein_pct: profile.macro_protein_pct || 30,
+                  macro_fat_pct: profile.macro_fat_pct || 30,
+                  app_theme: profile.app_theme || 'system',
+                });
+              }
+            }
+          } catch (err) {
+            console.error('Error syncing profile update to Supabase:', err);
+          }
+        })();
       },
 
       addFoodLog: (entry) => {
-        const { isTrial, foodLogs } = get();
-        
-        if (isTrial) {
-          // Check trial limit: 3rd distinct meal category logged in a single day
-          const dateLogs = foodLogs.filter((log) => log.logged_date === entry.logged_date);
-          const loggedCategories = new Set(dateLogs.map((log) => log.meal_type));
-          
-          if (!loggedCategories.has(entry.meal_type) && loggedCategories.size >= 2) {
-            // Trying to log a 3rd distinct category!
-            // Trigger sign up bottom sheet
-            set({ isSignUpModalOpen: true });
-            return false;
-          }
-        }
-
+        const id = uuid();
+        const logged_at = new Date().toISOString();
         const newEntry: FoodLogEntry = {
           ...entry,
-          id: Math.random().toString(36).substring(7),
-          logged_at: new Date().toISOString(),
+          id,
+          logged_at,
         };
 
         set((state) => ({
           foodLogs: [...state.foodLogs, newEntry],
         }));
+
+        (async () => {
+          try {
+            const userId = await getCurrentUserId();
+            if (userId) {
+              const amount = entry.amount_g || 100;
+              const calories_per_100g = ((entry.calories || 0) / amount) * 100;
+              const protein_per_100g = ((entry.protein || 0) / amount) * 100;
+              const carbs_per_100g = ((entry.carbs || 0) / amount) * 100;
+              const fat_per_100g = ((entry.fat || 0) / amount) * 100;
+
+              await supabase.from('foods_cache').upsert({
+                id: entry.food_id,
+                name_en: entry.name_en,
+                name_ar: entry.name_ar,
+                calories_per_100g,
+                protein_per_100g,
+                carbs_per_100g,
+                fat_per_100g,
+                source: entry.food_id.startsWith('usda:') ? 'usda' : (entry.food_id.startsWith('off:') ? 'off' : 'custom'),
+              }, { onConflict: 'id', ignoreDuplicates: true } as any);
+
+              await supabase.from('food_logs').upsert({
+                id,
+                user_id: userId,
+                food_id: entry.food_id,
+                meal_type: entry.meal_type,
+                amount_g: entry.amount_g,
+                logged_date: entry.logged_date,
+                logged_at,
+              });
+            }
+          } catch (err) {
+            console.error('Error syncing added food log:', err);
+          }
+        })();
+
         return true;
       },
 
@@ -317,52 +412,108 @@ export const useDiaryStore = create<DiaryState>()(
         set((state) => ({
           foodLogs: state.foodLogs.filter((log) => log.id !== id),
         }));
+
+        (async () => {
+          try {
+            const userId = await getCurrentUserId();
+            if (userId) {
+              await supabase.from('food_logs').delete().eq('id', id).eq('user_id', userId);
+            }
+          } catch (err) {
+            console.error('Error syncing deleted food log:', err);
+          }
+        })();
       },
 
       addWaterLog: (amount_ml, date) => {
+        const id = uuid();
+        const logged_at = new Date().toISOString();
         const newEntry: WaterLogEntry = {
-          id: Math.random().toString(36).substring(7),
+          id,
           amount_ml,
           logged_date: date,
-          logged_at: new Date().toISOString(),
+          logged_at,
         };
         set((state) => ({
           waterLogs: [...state.waterLogs, newEntry],
         }));
+
+        (async () => {
+          try {
+            const userId = await getCurrentUserId();
+            if (userId) {
+              await supabase.from('water_logs').upsert({
+                id,
+                user_id: userId,
+                amount_ml,
+                logged_date: date,
+                logged_at,
+              });
+            }
+          } catch (err) {
+            console.error('Error syncing added water log:', err);
+          }
+        })();
       },
 
       addWorkoutLog: (entry) => {
-        // Calculate calories burned
-        // Calories Burned = MET * Weight (kg) * Duration (hours)
         const weight = get().profile?.weight_kg || 80;
         const durationHours = entry.duration_minutes / 60;
         const calories_burned = Math.round(entry.met_value * weight * durationHours);
+        const id = uuid();
+        const logged_at = new Date().toISOString();
 
         const newEntry: WorkoutLogEntry = {
           ...entry,
-          id: Math.random().toString(36).substring(7),
+          id,
           calories_burned,
-          logged_at: new Date().toISOString(),
+          logged_at,
         };
 
         set((state) => ({
           workoutLogs: [...state.workoutLogs, newEntry],
         }));
+
+        (async () => {
+          try {
+            const userId = await getCurrentUserId();
+            if (userId) {
+              await supabase.from('workout_logs').upsert({
+                id,
+                user_id: userId,
+                activity_name_en: entry.activity_name_en,
+                activity_name_ar: entry.activity_name_ar,
+                met_value: entry.met_value,
+                duration_minutes: entry.duration_minutes,
+                calories_burned,
+                logged_date: entry.logged_date,
+                logged_at,
+              });
+            }
+          } catch (err) {
+            console.error('Error syncing added workout log:', err);
+          }
+        })();
       },
 
       deleteWorkoutLog: (id) => {
         set((state) => ({
           workoutLogs: state.workoutLogs.filter((log) => log.id !== id),
         }));
+
+        (async () => {
+          try {
+            const userId = await getCurrentUserId();
+            if (userId) {
+              await supabase.from('workout_logs').delete().eq('id', id).eq('user_id', userId);
+            }
+          } catch (err) {
+            console.error('Error syncing deleted workout log:', err);
+          }
+        })();
       },
 
       incrementRecipesCount: () => {
-        const { isTrial, generatedRecipesCount } = get();
-        if (isTrial && generatedRecipesCount >= 1) {
-          // Attempting to generate a 2nd custom recipe in trial
-          set({ isSignUpModalOpen: true });
-          return false;
-        }
         set((state) => ({
           generatedRecipesCount: state.generatedRecipesCount + 1,
         }));
@@ -371,22 +522,372 @@ export const useDiaryStore = create<DiaryState>()(
 
       setSignUpModalOpen: (open) => set({ isSignUpModalOpen: open }),
 
-      triggerClerkSignUp: () => {
+      triggerSignUp: () => {
         set({ isSignUpModalOpen: true });
       },
 
       addGeneratedRecipe: (recipe) => {
+        const recipeId = recipe.id.startsWith('ai_') ? uuid() : recipe.id;
+        const updatedRecipe = { ...recipe, id: recipeId };
+
         set((state) => ({
-          generatedRecipes: [...state.generatedRecipes, recipe]
+          generatedRecipes: [...state.generatedRecipes, updatedRecipe]
         }));
+
+        (async () => {
+          try {
+            const userId = await getCurrentUserId();
+            if (userId) {
+              await supabase.from('generated_recipes').upsert({
+                id: recipeId,
+                user_id: userId,
+                title_en: recipe.title_en,
+                title_ar: recipe.title_ar,
+                description_en: recipe.description_en,
+                description_ar: recipe.description_ar,
+                ingredients: recipe.ingredients,
+                steps_en: recipe.steps_en,
+                steps_ar: recipe.steps_ar,
+                total_calories: recipe.total_calories,
+                total_protein_g: recipe.total_protein_g,
+                total_carbs_g: recipe.total_carbs_g,
+                total_fat_g: recipe.total_fat_g,
+                image_url: recipe.image_url,
+                country_origin: recipe.country_origin || 'EG',
+              });
+            }
+          } catch (err) {
+            console.error('Error syncing added recipe to Supabase:', err);
+          }
+        })();
       },
 
       syncToSupabase: async (userId) => {
-        // Mock API sync network delay
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        
-        // After successfully syncing all local logs to the database, transition from trial
+        const profile = get().profile;
+        if (!profile) return;
+
+        // Ensure all local log IDs are valid UUIDs for Supabase compatibility
+        const updatedRecipes = get().generatedRecipes.map(recipe => ({
+          ...recipe,
+          id: getOrGenerateUuid(recipe.id)
+        }));
+
+        const updatedFoodLogs = get().foodLogs.map(entry => ({
+          ...entry,
+          id: getOrGenerateUuid(entry.id)
+        }));
+
+        const updatedWaterLogs = get().waterLogs.map(entry => ({
+          ...entry,
+          id: getOrGenerateUuid(entry.id)
+        }));
+
+        const updatedWorkoutLogs = get().workoutLogs.map(entry => ({
+          ...entry,
+          id: getOrGenerateUuid(entry.id)
+        }));
+
+        set({
+          generatedRecipes: updatedRecipes,
+          foodLogs: updatedFoodLogs,
+          waterLogs: updatedWaterLogs,
+          workoutLogs: updatedWorkoutLogs,
+        });
+
+        // Upsert Profile
+        const birthYear = new Date().getFullYear() - (profile.age || 28);
+        const date_of_birth = `${birthYear}-01-01`;
+
+        const { error: profileErr } = await supabase.from('profiles').upsert({
+          id: userId,
+          email: profile.email || '',
+          display_name: profile.name || 'Guest',
+          language: profile.language || 'ar',
+          country: profile.country || 'EG',
+          date_of_birth,
+          gender: profile.gender || 'male',
+          height_cm: profile.height_cm || 175,
+          weight_kg: profile.weight_kg || 75,
+          activity_level: profile.activity_level || 'moderately_active',
+          health_goal: profile.health_goal || 'lose_weight',
+          target_calories: profile.target_calories || 2000,
+          target_protein_g: profile.target_protein_g || 120,
+          target_carbs_g: profile.target_carbs_g || 200,
+          target_fat_g: profile.target_fat_g || 65,
+          target_water_ml: profile.target_water_ml || 2500,
+          diet_type: profile.diet_type || 'classic',
+          exclusions: profile.exclusions || [],
+          disliked_ingredients: profile.disliked_ingredients || [],
+          goal_weight_kg: profile.goal_weight_kg || null,
+          unit_weight: profile.unit_weight || 'kg',
+          unit_height: profile.unit_height || 'cm',
+          unit_water: profile.unit_water || 'ml',
+          reminder_meals: profile.reminder_meals !== undefined ? profile.reminder_meals : true,
+          reminder_water: profile.reminder_water !== undefined ? profile.reminder_water : true,
+          reminder_workout: profile.reminder_workout !== undefined ? profile.reminder_workout : true,
+          macro_preset: profile.macro_preset || 'balanced',
+          macro_carbs_pct: profile.macro_carbs_pct || 40,
+          macro_protein_pct: profile.macro_protein_pct || 30,
+          macro_fat_pct: profile.macro_fat_pct || 30,
+          app_theme: profile.app_theme || 'system',
+        });
+
+        if (profileErr) {
+          console.error('Error syncing profile:', profileErr.message);
+          return;
+        }
+
+        // Upsert Generated Recipes
+        for (const recipe of updatedRecipes) {
+          await supabase.from('generated_recipes').upsert({
+            id: recipe.id,
+            user_id: userId,
+            title_en: recipe.title_en,
+            title_ar: recipe.title_ar,
+            description_en: recipe.description_en,
+            description_ar: recipe.description_ar,
+            ingredients: recipe.ingredients,
+            steps_en: recipe.steps_en,
+            steps_ar: recipe.steps_ar,
+            total_calories: recipe.total_calories,
+            total_protein_g: recipe.total_protein_g,
+            total_carbs_g: recipe.total_carbs_g,
+            total_fat_g: recipe.total_fat_g,
+            image_url: recipe.image_url,
+            country_origin: recipe.country_origin || 'EG',
+          });
+        }
+
+        // Upsert Food Logs
+        for (const entry of updatedFoodLogs) {
+          const amount = entry.amount_g || 100;
+          const calories_per_100g = ((entry.calories || 0) / amount) * 100;
+          const protein_per_100g = ((entry.protein || 0) / amount) * 100;
+          const carbs_per_100g = ((entry.carbs || 0) / amount) * 100;
+          const fat_per_100g = ((entry.fat || 0) / amount) * 100;
+
+          await supabase.from('foods_cache').upsert({
+            id: entry.food_id,
+            name_en: entry.name_en,
+            name_ar: entry.name_ar,
+            calories_per_100g,
+            protein_per_100g,
+            carbs_per_100g,
+            fat_per_100g,
+            source: 'custom',
+          });
+
+          await supabase.from('food_logs').upsert({
+            id: entry.id,
+            user_id: userId,
+            food_id: entry.food_id,
+            meal_type: entry.meal_type,
+            amount_g: entry.amount_g,
+            logged_date: entry.logged_date,
+            logged_at: entry.logged_at,
+          });
+        }
+
+        // Upsert Water Logs
+        for (const entry of updatedWaterLogs) {
+          await supabase.from('water_logs').upsert({
+            id: entry.id,
+            user_id: userId,
+            amount_ml: entry.amount_ml,
+            logged_date: entry.logged_date,
+            logged_at: entry.logged_at,
+          });
+        }
+
+        // Upsert Workout Logs
+        for (const entry of updatedWorkoutLogs) {
+          await supabase.from('workout_logs').upsert({
+            id: entry.id,
+            user_id: userId,
+            activity_name_en: entry.activity_name_en,
+            activity_name_ar: entry.activity_name_ar,
+            met_value: entry.met_value,
+            duration_minutes: entry.duration_minutes,
+            calories_burned: entry.calories_burned,
+            logged_date: entry.logged_date,
+            logged_at: entry.logged_at,
+          });
+        }
+
         set({ isTrial: false });
+      },
+
+      fetchFromSupabase: async (userId) => {
+        try {
+          // 1. Fetch Profile
+          const { data: dbProfile, error: profileErr } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+          if (profileErr && profileErr.code !== 'PGRST116') {
+            console.error('Error fetching profile:', profileErr);
+          }
+
+          let profile = get().profile;
+          if (dbProfile) {
+            const birthYear = new Date(dbProfile.date_of_birth).getFullYear();
+            const age = new Date().getFullYear() - birthYear;
+            profile = {
+              name: dbProfile.display_name || 'Guest',
+              email: dbProfile.email,
+              gender: dbProfile.gender || 'male',
+              age,
+              weight_kg: parseFloat(dbProfile.weight_kg),
+              height_cm: parseFloat(dbProfile.height_cm),
+              activity_level: dbProfile.activity_level,
+              health_goal: dbProfile.health_goal,
+              language: dbProfile.language || 'ar',
+              country: dbProfile.country || 'EG',
+              onboarded: true,
+              target_calories: parseFloat(dbProfile.target_calories),
+              target_protein_g: parseFloat(dbProfile.target_protein_g),
+              target_carbs_g: parseFloat(dbProfile.target_carbs_g),
+              target_fat_g: parseFloat(dbProfile.target_fat_g),
+              target_water_ml: parseFloat(dbProfile.target_water_ml),
+              diet_type: dbProfile.diet_type || 'classic',
+              exclusions: dbProfile.exclusions || [],
+              disliked_ingredients: dbProfile.disliked_ingredients || [],
+              goal_weight_kg: dbProfile.goal_weight_kg ? parseFloat(dbProfile.goal_weight_kg) : undefined,
+              unit_weight: dbProfile.unit_weight || 'kg',
+              unit_height: dbProfile.unit_height || 'cm',
+              unit_water: dbProfile.unit_water || 'ml',
+              reminder_meals: dbProfile.reminder_meals !== null ? dbProfile.reminder_meals : true,
+              reminder_water: dbProfile.reminder_water !== null ? dbProfile.reminder_water : true,
+              reminder_workout: dbProfile.reminder_workout !== null ? dbProfile.reminder_workout : true,
+              macro_preset: dbProfile.macro_preset || 'balanced',
+              macro_carbs_pct: dbProfile.macro_carbs_pct !== null ? parseInt(dbProfile.macro_carbs_pct) : 40,
+              macro_protein_pct: dbProfile.macro_protein_pct !== null ? parseInt(dbProfile.macro_protein_pct) : 30,
+              macro_fat_pct: dbProfile.macro_fat_pct !== null ? parseInt(dbProfile.macro_fat_pct) : 30,
+              app_theme: dbProfile.app_theme || 'system',
+            };
+          }
+
+          // 2. Fetch Food Logs with joined foods_cache
+          const { data: dbFoodLogs, error: foodErr } = await supabase
+            .from('food_logs')
+            .select(`
+              id,
+              food_id,
+              meal_type,
+              amount_g,
+              logged_date,
+              logged_at,
+              foods_cache (
+                name_en,
+                name_ar,
+                calories_per_100g,
+                protein_per_100g,
+                carbs_per_100g,
+                fat_per_100g
+              )
+            `)
+            .eq('user_id', userId);
+
+          let foodLogs = get().foodLogs;
+          if (dbFoodLogs) {
+            foodLogs = dbFoodLogs.map((log: any) => {
+              const food = log.foods_cache || { name_en: 'Unknown', name_ar: 'غير معروف', calories_per_100g: 0, protein_per_100g: 0, carbs_per_100g: 0, fat_per_100g: 0 };
+              const amount = parseFloat(log.amount_g);
+              return {
+                id: log.id,
+                food_id: log.food_id,
+                meal_type: log.meal_type,
+                amount_g: amount,
+                name_en: food.name_en,
+                name_ar: food.name_ar,
+                calories: (parseFloat(food.calories_per_100g) * amount) / 100,
+                protein: (parseFloat(food.protein_per_100g) * amount) / 100,
+                carbs: (parseFloat(food.carbs_per_100g) * amount) / 100,
+                fat: (parseFloat(food.fat_per_100g) * amount) / 100,
+                logged_date: log.logged_date,
+                logged_at: log.logged_at,
+              };
+            });
+          }
+
+          // 3. Fetch Water Logs
+          const { data: dbWaterLogs, error: waterErr } = await supabase
+            .from('water_logs')
+            .select('*')
+            .eq('user_id', userId);
+
+          let waterLogs = get().waterLogs;
+          if (dbWaterLogs) {
+            waterLogs = dbWaterLogs.map((log: any) => ({
+              id: log.id,
+              amount_ml: parseFloat(log.amount_ml),
+              logged_date: log.logged_date,
+              logged_at: log.logged_at,
+            }));
+          }
+
+          // 4. Fetch Workout Logs
+          const { data: dbWorkoutLogs, error: workoutErr } = await supabase
+            .from('workout_logs')
+            .select('*')
+            .eq('user_id', userId);
+
+          let workoutLogs = get().workoutLogs;
+          if (dbWorkoutLogs) {
+            workoutLogs = dbWorkoutLogs.map((log: any) => ({
+              id: log.id,
+              activity_id: 'custom',
+              activity_name_en: log.activity_name_en,
+              activity_name_ar: log.activity_name_ar,
+              met_value: parseFloat(log.met_value),
+              duration_minutes: parseFloat(log.duration_minutes),
+              calories_burned: parseFloat(log.calories_burned),
+              logged_date: log.logged_date,
+              logged_at: log.logged_at,
+            }));
+          }
+
+          // 5. Fetch Generated Recipes
+          const { data: dbRecipes, error: recipeErr } = await supabase
+            .from('generated_recipes')
+            .select('*')
+            .eq('user_id', userId);
+
+          let generatedRecipes = get().generatedRecipes;
+          if (dbRecipes) {
+            generatedRecipes = dbRecipes.map((r: any) => ({
+              id: r.id,
+              title_en: r.title_en,
+              title_ar: r.title_ar,
+              description_en: r.description_en,
+              description_ar: r.description_ar,
+              ingredients: r.ingredients,
+              steps_en: r.steps_en,
+              steps_ar: r.steps_ar,
+              total_calories: parseFloat(r.total_calories),
+              total_protein_g: parseFloat(r.total_protein_g),
+              total_carbs_g: parseFloat(r.total_carbs_g),
+              total_fat_g: parseFloat(r.total_fat_g),
+              image_url: r.image_url,
+              country_origin: r.country_origin,
+              category: 'lunch',
+              tags: ['AI Generated'],
+            }));
+          }
+
+          set({
+            profile,
+            foodLogs,
+            waterLogs,
+            workoutLogs,
+            generatedRecipes,
+            isTrial: false,
+          });
+        } catch (err) {
+          console.error('Error fetching data from Supabase:', err);
+        }
       },
 
       resetAll: () => {

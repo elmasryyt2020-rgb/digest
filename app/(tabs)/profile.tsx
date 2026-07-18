@@ -19,6 +19,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { PresstoButton } from '@/components/PresstoButton';
 import { faqCategories } from '@/data/faqData';
 import { privacySections } from '@/data/privacyData';
+import { termsSections } from '@/data/termsData';
+
 
 // Helper conversions for Ft/In and Cm
 const cmToFtIn = (cm: number) => {
@@ -202,6 +204,8 @@ export default function ProfileScreen() {
   const [showFaqModal, setShowFaqModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+
 
   // FAQ States
   const [faqSearchQuery, setFaqSearchQuery] = useState('');
@@ -517,13 +521,31 @@ export default function ProfileScreen() {
         </View>
 
         {/* Section 3: Biometrics Settings (Collapsible) */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+        <View className={`bg-white rounded-3xl border border-border-muted mb-5 shadow-sm ${showBiometrics ? 'p-5' : 'p-4'}`}>
           <TouchableOpacity
             onPress={() => setShowBiometrics(!showBiometrics)}
-            className={`flex-row justify-between items-center mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}
+            className={`flex-row justify-between items-center ${showBiometrics ? 'mb-4' : ''} ${isRtl ? 'flex-row-reverse' : ''}`}
           >
-            <Text className="text-sm font-outfit-bold text-text-primary">{t.personalStats}</Text>
-            <Ionicons name={showBiometrics ? "chevron-up" : "chevron-down"} size={20} color="#1A1E1C" />
+            <View className={`flex-row items-center flex-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Ionicons
+                name="fitness-outline"
+                size={20}
+                color="#4C6E58"
+                style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }}
+              />
+              <View className="flex-1">
+                <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t.personalStats}
+                </Text>
+                <Text className={`font-inter text-[10px] text-text-muted mt-0.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {isRtl
+                    ? 'تعديل الجنس، العمر، الوزن، الطول، مستوى النشاط والهدف الصحي'
+                    : 'Edit gender, age, weight, height, activity, and goals'
+                  }
+                </Text>
+              </View>
+            </View>
+            <Ionicons name={showBiometrics ? "chevron-up" : "chevron-down"} size={20} color="#626A66" />
           </TouchableOpacity>
 
           {showBiometrics && (
@@ -952,9 +974,10 @@ export default function ProfileScreen() {
 
             {/* Terms of Service */}
             <TouchableOpacity 
-              onPress={() => Alert.alert(isRtl ? 'شروط الخدمة' : 'Terms of Service', isRtl ? 'سيتم فتح شروط الخدمة...' : 'Opening Terms of Service...')} 
+              onPress={() => setShowTermsModal(true)} 
               className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
             >
+
               <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <Ionicons name="document-text-outline" size={18} color="#626A66" style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} />
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.termsOfService}</Text>
@@ -1636,6 +1659,84 @@ export default function ProfileScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Terms of Service Modal */}
+      <Modal
+        visible={showTermsModal}
+        animationType="slide"
+        onRequestClose={() => setShowTermsModal(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+          {/* Modal Header */}
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <TouchableOpacity onPress={() => setShowTermsModal(false)} className="p-1">
+              <Ionicons name={isRtl ? "chevron-forward" : "chevron-back"} size={24} color="#1A1E1C" />
+            </TouchableOpacity>
+            <Text className="text-base font-outfit-bold text-text-primary">{t.termsOfService}</Text>
+            <View className="w-10" />
+          </View>
+
+          {/* Terms of Service Content */}
+          <ScrollView 
+            contentContainerStyle={{ padding: 20, paddingBottom: 60 }} 
+            showsVerticalScrollIndicator={false}
+          >
+            <View className="gap-y-4">
+              {termsSections.map((section) => (
+                <View 
+                  key={section.id} 
+                  className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm"
+                >
+                  {/* Section Title with Icon */}
+                  <View className={`flex-row items-center mb-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <Ionicons 
+                      name={section.icon as any} 
+                      size={20} 
+                      color="#4A5E53" 
+                      style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} 
+                    />
+                    <Text className={`text-sm font-outfit-bold text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
+                      {isRtl ? section.title_ar : section.title_en}
+                    </Text>
+                  </View>
+
+                  {/* Section Paragraphs */}
+                  <View className="gap-y-3">
+                    {(isRtl ? section.paragraphs_ar : section.paragraphs_en).map((para, index) => (
+                      <Text 
+                        key={index} 
+                        className={`text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}
+                      >
+                        {para}
+                      </Text>
+                    ))}
+                  </View>
+
+                  {/* Optional Bullet Points */}
+                  {((isRtl ? section.bullets_ar : section.bullets_en) && (isRtl ? section.bullets_ar : section.bullets_en)!.length > 0) && (
+                    <View className="mt-3.5 gap-y-2 border-t border-[#F0F2F0] pt-3.5">
+                      {(isRtl ? section.bullets_ar : section.bullets_en)!.map((bullet, index) => (
+                        <View 
+                          key={index} 
+                          className={`flex-row items-start ${isRtl ? 'flex-row-reverse' : ''}`}
+                        >
+                          <Text className="text-[#4A5E53] px-2">•</Text>
+                          <Text 
+                            className={`flex-1 text-xs font-inter-regular text-text-muted leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}
+                          >
+                            {bullet}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
+
   );
 }

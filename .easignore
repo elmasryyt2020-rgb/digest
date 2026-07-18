@@ -17,3 +17,6 @@ Eat this much screenshots/
 UI inspo/
 scratch/
 .git/
+
+# local env files
+.env*.local

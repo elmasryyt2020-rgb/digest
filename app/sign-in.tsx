@@ -3,11 +3,11 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -20,24 +20,32 @@ import { PresstoButton } from '@/components/PresstoButton';
 export default function SignInScreen() {
   const router = useRouter();
   const signIn = useAuthStore((state) => state.signIn);
+  const sendPasswordReset = useAuthStore((state) => state.sendPasswordReset);
+  const verifyResetOtp = useAuthStore((state) => state.verifyResetOtp);
+  const updatePassword = useAuthStore((state) => state.updatePassword);
   const isAuthLoading = useAuthStore((state) => state.isLoading);
   const setProfile = useDiaryStore((state) => state.setProfile);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otpToken, setOtpToken] = useState('');
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1); // 1: request reset, 2: verify reset & set new pass
+  
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
 
   const handleSignIn = async () => {
     setError('');
+    setInfo('');
     if (!email.trim() || !password.trim()) {
       setError('Please fill in all fields.');
       return;
     }
 
     try {
-      const success = await signIn(email.trim());
+      const success = await signIn(email.trim(), password.trim());
       if (success) {
-        // Mark as onboarded and sync biometrics
         setProfile({ onboarded: true });
         router.replace('/(tabs)');
       } else {
@@ -46,6 +54,59 @@ export default function SignInScreen() {
     } catch (e: any) {
       setError(e.message || 'An error occurred during sign in.');
     }
+  };
+
+  const handleSendReset = async () => {
+    setError('');
+    setInfo('');
+    if (!email.trim()) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    try {
+      const success = await sendPasswordReset(email.trim());
+      if (success) {
+        setInfo('A password reset code has been sent to your email.');
+        setForgotStep(2);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to send reset email.');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setError('');
+    setInfo('');
+    if (!otpToken.trim() || !password.trim()) {
+      setError('Please fill in all fields.');
+      return;
+    }
+
+    try {
+      const verified = await verifyResetOtp(email.trim(), otpToken.trim());
+      if (verified) {
+        const success = await updatePassword(password.trim());
+        if (success) {
+          setInfo('Password successfully updated! You are now logged in.');
+          setProfile({ onboarded: true });
+          setTimeout(() => {
+            router.replace('/(tabs)');
+          }, 1500);
+        }
+      }
+    } catch (e: any) {
+      setError(e.message || 'Password reset failed.');
+    }
+  };
+
+  const handleBackToSignIn = () => {
+    setError('');
+    setInfo('');
+    setIsForgotPassword(false);
+    setForgotStep(1);
+    setPassword('');
+    setOtpToken('');
   };
 
   return (
@@ -61,11 +122,17 @@ export default function SignInScreen() {
           {/* Header */}
           <View className="items-center mb-8">
             <Ionicons name="heart" size={40} color="#4C6E58" />
-            <Text className="font-outfit-bold text-2xl text-text-primary mt-2">
-              Sign In to digest
+            <Text className="font-outfit-bold text-2xl text-text-primary mt-2 text-center">
+              {isForgotPassword
+                ? (forgotStep === 1 ? 'Reset Your Password' : 'Enter New Password')
+                : 'Sign In to digest'}
             </Text>
             <Text className="font-inter text-xs text-text-muted text-center mt-1 max-w-[280px]">
-              Access your daily health logs, custom AI recipes, and nutrient reports.
+              {isForgotPassword
+                ? (forgotStep === 1
+                    ? 'Enter your email address and we will send you a verification code.'
+                    : 'Enter the code sent to your email and choose a new secure password.')
+                : 'Access your daily health logs, custom AI recipes, and nutrient reports.'}
             </Text>
           </View>
 
@@ -77,87 +144,170 @@ export default function SignInScreen() {
             </View>
           ) : null}
 
-          {/* Form */}
-          <View className="gap-4 mb-6">
-            <View>
-              <Text className="font-outfit-semibold text-xs text-text-primary mb-1.5">
-                Email Address
+          {info ? (
+            <View className="bg-accent-mint border border-[#C3D9B6] p-4 rounded-2xl mb-4">
+              <Text className="text-xs font-inter-semibold text-accent-sage text-center">
+                {info}
               </Text>
-              <TextInput
-                className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
-                placeholder="name@example.com"
-                placeholderTextColor="#9CA19E"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={email}
-                onChangeText={setEmail}
-              />
             </View>
+          ) : null}
 
-            <View>
-              <Text className="font-outfit-semibold text-xs text-text-primary mb-1.5">
-                Password
-              </Text>
-              <TextInput
-                className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
-                placeholder="••••••••"
-                placeholderTextColor="#9CA19E"
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                value={password}
-                onChangeText={setPassword}
-              />
-            </View>
-          </View>
+          {/* Form Flows */}
+          {!isForgotPassword ? (
+            <>
+              {/* Sign In Form */}
+              <View className="gap-4 mb-6">
+                <View>
+                  <Text className="font-outfit-semibold text-xs text-text-primary mb-1.5">
+                    Email Address
+                  </Text>
+                  <TextInput
+                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                    placeholder="name@example.com"
+                    placeholderTextColor="#9CA19E"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={email}
+                    onChangeText={setEmail}
+                  />
+                </View>
 
-          {/* Submit */}
-          <PresstoButton
-            disabled={isAuthLoading}
-            onPress={handleSignIn}
-            className="bg-accent-sage rounded-2xl py-4 items-center justify-center mb-6"
-          >
-            {isAuthLoading ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text className="text-white font-outfit-bold text-sm">Sign In</Text>
-            )}
-          </PresstoButton>
+                <View>
+                  <Text className="font-outfit-semibold text-xs text-text-primary mb-1.5">
+                    Password
+                  </Text>
+                  <TextInput
+                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                    placeholder="••••••••"
+                    placeholderTextColor="#9CA19E"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={password}
+                    onChangeText={setPassword}
+                  />
+                </View>
+              </View>
 
-          {/* Divider */}
-          <View className="flex-row items-center mb-6">
-            <View className="flex-1 h-[1px] bg-[#EAECEB]" />
-            <Text className="font-inter-semibold text-[10px] text-text-muted px-3 uppercase tracking-wider">
-              Or continue with
-            </Text>
-            <View className="flex-1 h-[1px] bg-[#EAECEB]" />
-          </View>
+              {/* Forgot Password Link */}
+              <TouchableOpacity
+                onPress={() => setIsForgotPassword(true)}
+                className="self-end mb-6"
+              >
+                <Text className="font-inter-medium text-xs text-accent-sage underline">
+                  Forgot Password?
+                </Text>
+              </TouchableOpacity>
 
-          {/* Social login buttons */}
-          <View className="flex-row gap-4 mb-6">
-            <TouchableOpacity className="flex-1 flex-row items-center justify-center p-3 border border-border-muted rounded-2xl bg-white">
-              <Ionicons name="logo-google" size={18} color="#1A1E1C" />
-              <Text className="font-outfit-bold text-xs text-text-primary ml-2">Google</Text>
-            </TouchableOpacity>
+              {/* Submit Sign In */}
+              <PresstoButton
+                disabled={isAuthLoading}
+                onPress={handleSignIn}
+                className="bg-accent-sage rounded-2xl py-4 items-center justify-center mb-6"
+              >
+                {isAuthLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text className="text-white font-outfit-bold text-sm">Sign In</Text>
+                )}
+              </PresstoButton>
 
-            <TouchableOpacity className="flex-1 flex-row items-center justify-center p-3 border border-border-muted rounded-2xl bg-white">
-              <Ionicons name="logo-apple" size={18} color="#1A1E1C" />
-              <Text className="font-outfit-bold text-xs text-text-primary ml-2">Apple</Text>
-            </TouchableOpacity>
-          </View>
+              <PresstoButton
+                onPress={() => router.push('/sign-up')}
+                className="items-center py-2"
+              >
+                <Text className="font-inter text-xs text-text-muted">
+                  Don't have an account?{' '}
+                  <Text className="text-accent-sage font-inter-bold underline">
+                    Sign Up
+                  </Text>
+                </Text>
+              </PresstoButton>
+            </>
+          ) : (
+            <>
+              {/* Forgot Password Form */}
+              <View className="gap-4 mb-6">
+                <View>
+                  <Text className="font-outfit-semibold text-xs text-text-primary mb-1.5">
+                    Email Address
+                  </Text>
+                  <TextInput
+                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                    placeholder="name@example.com"
+                    placeholderTextColor="#9CA19E"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    value={email}
+                    onChangeText={setEmail}
+                    editable={forgotStep === 1}
+                  />
+                </View>
 
-          <PresstoButton
-            onPress={() => router.push('/sign-up')}
-            className="items-center py-2"
-          >
-            <Text className="font-inter text-xs text-text-muted">
-              Don't have an account?{' '}
-              <Text className="text-accent-sage font-inter-bold underline">
-                Sign Up
-              </Text>
-            </Text>
-          </PresstoButton>
+                {forgotStep === 2 && (
+                  <>
+                    <View>
+                      <Text className="font-outfit-semibold text-xs text-text-primary mb-1.5">
+                        Verification Code (OTP)
+                      </Text>
+                      <TextInput
+                        className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-lg text-center"
+                        placeholder="123456"
+                        placeholderTextColor="#9CA19E"
+                        keyboardType="number-pad"
+                        maxLength={6}
+                        style={{ letterSpacing: 4 }}
+                        value={otpToken}
+                        onChangeText={setOtpToken}
+                      />
+                    </View>
+
+                    <View>
+                      <Text className="font-outfit-semibold text-xs text-text-primary mb-1.5">
+                        New Password
+                      </Text>
+                      <TextInput
+                        className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                        placeholder="••••••••"
+                        placeholderTextColor="#9CA19E"
+                        secureTextEntry
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        value={password}
+                        onChangeText={setPassword}
+                      />
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {/* Submit Action */}
+              <PresstoButton
+                disabled={isAuthLoading}
+                onPress={forgotStep === 1 ? handleSendReset : handleResetPassword}
+                className="bg-accent-sage rounded-2xl py-4 items-center justify-center mb-6"
+              >
+                {isAuthLoading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text className="text-white font-outfit-bold text-sm">
+                    {forgotStep === 1 ? 'Send Reset Code' : 'Update Password'}
+                  </Text>
+                )}
+              </PresstoButton>
+
+              <TouchableOpacity
+                onPress={handleBackToSignIn}
+                className="items-center py-2"
+              >
+                <Text className="font-inter text-xs text-text-muted underline">
+                  Back to Sign In
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

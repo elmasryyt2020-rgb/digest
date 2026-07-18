@@ -170,7 +170,7 @@ export default function OnboardingScreen() {
             health_goal: goal,
             language: 'en' as const, // default English for funnel screen
             country: detectedCountry,
-            onboarded: false, // will set to true on Clerk Signup completion
+            onboarded: false, // will set to true on Supabase Signup completion
             diet_type: dietType,
             exclusions: exclusions,
             disliked_ingredients: [],
