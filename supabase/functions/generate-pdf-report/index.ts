@@ -45,7 +45,7 @@ serve(async (req) => {
     // Handle delete action
     if (body.action === 'delete') {
       const fileName = body.fileName;
-      if (typeof fileName !== 'string' || fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {
+      if (typeof fileName !== 'string' || !fileName.trim() || fileName.includes('/') || fileName.includes('\\') || fileName.includes('..')) {
         status = 400;
         throw new Error('Invalid file name');
       }
@@ -54,7 +54,7 @@ serve(async (req) => {
       const { error: deleteError } = await supabase.storage.from('reports').remove([filePath]);
       if (deleteError) {
         status = 500;
-        throw deleteError;
+        throw new Error(deleteError.message);
       }
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -99,23 +99,23 @@ serve(async (req) => {
     // Handle database errors
     if (profileRes.error || !profileRes.data) {
       status = 404;
-      throw new Error('Profile not found');
+      throw new Error(profileRes.error?.message || 'Profile not found');
     }
     if (foodLogsRes.error) {
       status = 500;
-      throw foodLogsRes.error;
+      throw new Error(foodLogsRes.error.message);
     }
     if (waterLogsRes.error) {
       status = 500;
-      throw waterLogsRes.error;
+      throw new Error(waterLogsRes.error.message);
     }
     if (workoutLogsRes.error) {
       status = 500;
-      throw workoutLogsRes.error;
+      throw new Error(workoutLogsRes.error.message);
     }
     if (mealPlansRes.error) {
       status = 500;
-      throw mealPlansRes.error;
+      throw new Error(mealPlansRes.error.message);
     }
 
     const profile = profileRes.data;
@@ -124,14 +124,92 @@ serve(async (req) => {
     const workoutLogs = workoutLogsRes.data;
     const latestPlan = mealPlansRes.data?.[0] || null;
 
+    // Aggregation math
+    let totalCal = 0;
+    let totalProtein = 0;
+    let totalCarbs = 0;
+    let totalFat = 0;
+
+    for (const log of foodLogs || []) {
+      const amt = Number(log.amount_g) || 0;
+      const cache = log.foods_cache as any;
+      if (cache) {
+        totalCal += (amt * (Number(cache.calories_per_100g) || 0)) / 100;
+        totalProtein += (amt * (Number(cache.protein_per_100g) || 0)) / 100;
+        totalCarbs += (amt * (Number(cache.carbs_per_100g) || 0)) / 100;
+        totalFat += (amt * (Number(cache.fat_per_100g) || 0)) / 100;
+      }
+    }
+
+    const avgCal = Math.round(totalCal / 7);
+    const avgProtein = Math.round(totalProtein / 7);
+    const avgCarbs = Math.round(totalCarbs / 7);
+    const avgFat = Math.round(totalFat / 7);
+
+    let totalWater = 0;
+    for (const log of waterLogs || []) {
+      totalWater += Number(log.amount_ml) || 0;
+    }
+    const avgWater = Math.round(totalWater / 7);
+
+    const totalWorkoutsCount = workoutLogs?.length || 0;
+    let totalCaloriesBurned = 0;
+    for (const log of workoutLogs || []) {
+      totalCaloriesBurned += Number(log.calories_burned) || 0;
+    }
+    totalCaloriesBurned = Math.round(totalCaloriesBurned);
+
+    const isAr = profile.language === 'ar';
+    const clientName = profile.display_name || (isAr ? 'مستخدم' : 'User');
+    const healthGoal = profile.health_goal || 'maintain_weight';
+
+    const targetCal = Math.round(Number(profile.target_calories) || 2000);
+    const targetProtein = Math.round(Number(profile.target_protein_g) || 120);
+    const targetCarbs = Math.round(Number(profile.target_carbs_g) || 200);
+    const targetFat = Math.round(Number(profile.target_fat_g) || 65);
+    const targetWater = Math.round(Number(profile.target_water_ml) || 2500);
+
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+    let aiInsight = isAr 
+      ? "حافظ على وتيرة جيدة في تتبع وجباتك والتزامك بأهدافك الصحية!"
+      : "Keep up the excellent work tracking your meals and adhering to your fitness goals!";
+
+    if (geminiKey) {
+      try {
+        const prompt = `You are a professional nutritionist. Write a personal, friendly coaching summary in ${isAr ? 'Arabic' : 'English'} for ${clientName} based on their weekly metrics.
+Daily Target Calories: ${targetCal} kcal, Average intake: ${avgCal} kcal.
+Target Macros: Protein ${targetProtein}g, Carbs ${targetCarbs}g, Fats ${targetFat}g.
+Average Actual Macros: Protein ${avgProtein}g, Carbs ${avgCarbs}g, Fats ${avgFat}g.
+Target Daily Water: ${targetWater}ml, Average actual water: ${avgWater}ml.
+Workouts: completed ${totalWorkoutsCount} workouts this week, burning ${totalCaloriesBurned} total calories.
+Health Goal: ${healthGoal}.
+Keep the summary to exactly 2-3 sentences. Focus on positive reinforcement or 1 actionable adjustment (e.g. eating more protein/water, adjusting calories).
+Provide ONLY the response without any formatting, markdown, or preambles.`;
+
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          }
+        );
+        if (geminiRes.ok) {
+          const geminiData = await geminiRes.json();
+          const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (responseText) aiInsight = responseText;
+        }
+      } catch (err) {
+        console.error('Error generating AI Insights:', err);
+      }
+    }
+
     // Temporal return block for verification
     return new Response(JSON.stringify({ 
       success: true, 
-      profile: { display_name: profile.display_name, country: profile.country },
-      foodLogsCount: foodLogs.length,
-      waterLogsCount: waterLogs.length,
-      workoutLogsCount: workoutLogs.length,
-      hasMealPlan: latestPlan !== null
+      aiInsight,
+      averages: { avgCal, avgProtein, avgCarbs, avgFat, avgWater },
+      totals: { totalWorkoutsCount, totalCaloriesBurned }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
