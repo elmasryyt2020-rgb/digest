@@ -1588,8 +1588,13 @@ export default function ProfileScreen() {
                   className="bg-white rounded-3xl border border-border-muted p-5 shadow-sm"
                 >
                   {/* Section Title with Icon */}
-                  <View className={`flex-row items-center mb-3.5 gap-x-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <Ionicons name={section.icon as any} size={20} color="#4A5E53" />
+                  <View className={`flex-row items-center mb-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <Ionicons 
+                      name={section.icon as any} 
+                      size={20} 
+                      color="#4A5E53" 
+                      style={isRtl ? { marginLeft: 10 } : { marginRight: 10 }} 
+                    />
                     <Text className={`text-sm font-outfit-bold text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}>
                       {isRtl ? section.title_ar : section.title_en}
                     </Text>
