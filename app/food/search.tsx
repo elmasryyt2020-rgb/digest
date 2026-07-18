@@ -264,6 +264,12 @@ export default function FoodSearchScreen() {
   }, [mode, barcodeState]);
 
   useEffect(() => {
+    if (!selectedFood && mode === 'barcode') {
+      setBarcodeState('scanning');
+    }
+  }, [selectedFood, mode]);
+
+  useEffect(() => {
     const fetchDefaultFoods = async () => {
       setLoadingDbFoods(true);
       try {
@@ -1009,105 +1015,105 @@ export default function FoodSearchScreen() {
 
         {/* Barcode Viewfinder */}
         {mode === 'barcode' && (
-          <View className="flex-1 bg-[#1A1E1C] p-5 justify-center items-center">
-            {barcodeState === 'scanning' ? (
-              <View className="w-full flex-1 justify-center items-center">
-                {/* Header info */}
-                <View className="flex-row items-center justify-between w-full mb-6 px-4">
-                  <Text className="text-white font-outfit-bold text-lg">{t.barcodeTitle}</Text>
-                  <TouchableOpacity onPress={() => setMode('search')} className="p-2">
-                    <Ionicons name="close" size={24} color="#FFF" />
-                  </TouchableOpacity>
-                </View>
+          <View className="flex-1 bg-[#1A1E1C] p-5 relative">
+            {/* Header info */}
+            <View className="flex-row items-center justify-between w-full mb-6 px-4 pt-4 z-20">
+              <Text className="text-white font-outfit-bold text-lg">{t.barcodeTitle}</Text>
+              <TouchableOpacity onPress={() => setMode('search')} className="p-2">
+                <Ionicons name="close" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </View>
 
-                {!permission ? (
-                  <ActivityIndicator size="small" color="#4C6E58" />
-                ) : !permission.granted ? (
-                  // Permission Denied or Simulator UI Fallback
-                  <View className="w-full max-w-sm bg-white p-6 rounded-[28] border border-border-muted shadow-lg items-center">
-                    <Ionicons name="camera-outline" size={48} color="#D13A3A" className="mb-3" />
-                    <Text className="text-text-primary font-outfit-bold text-center text-sm mb-1">
-                      {isRtl ? 'الكاميرا غير متوفرة أو تم رفض الإذن' : 'Camera Unavailable / Permission Denied'}
-                    </Text>
-                    <Text className="text-text-muted font-inter text-center text-xs mb-4">
-                      {isRtl 
-                        ? 'يرجى تفعيل صلاحية الكاميرا أو كتابة الباركود يدوياً للمحاكاة.'
-                        : 'Please grant camera permissions or type the barcode manually to simulate scanning.'}
-                    </Text>
-                    
-                    <TextInput
-                      value={manualBarcode}
-                      onChangeText={setManualBarcode}
-                      placeholder={isRtl ? 'اكتب الباركود هنا (مثال: 6223000100412)' : 'Type barcode here (e.g., 6223000100412)'}
-                      keyboardType="number-pad"
-                      style={{ height: 42 }}
-                      className="w-full bg-[#F3F6F3] border border-border-muted rounded-xl px-4 text-text-primary text-xs mb-3 text-center"
-                    />
+            {!permission ? (
+              <ActivityIndicator size="small" color="#4C6E58" />
+            ) : !permission.granted ? (
+              // Permission Denied or Simulator UI Fallback
+              <View className="flex-1 justify-center items-center">
+                <View className="w-full max-w-sm bg-white p-6 rounded-[28] border border-border-muted shadow-lg items-center">
+                  <Ionicons name="camera-outline" size={48} color="#D13A3A" className="mb-3" />
+                  <Text className="text-text-primary font-outfit-bold text-center text-sm mb-1">
+                    {isRtl ? 'الكاميرا غير متوفرة أو تم رفض الإذن' : 'Camera Unavailable / Permission Denied'}
+                  </Text>
+                  <Text className="text-text-muted font-inter text-center text-xs mb-4">
+                    {isRtl 
+                      ? 'يرجى تفعيل صلاحية الكاميرا أو كتابة الباركود يدوياً للمحاكاة.'
+                      : 'Please grant camera permissions or type the barcode manually to simulate scanning.'}
+                  </Text>
+                  
+                  <TextInput
+                    value={manualBarcode}
+                    onChangeText={setManualBarcode}
+                    placeholder={isRtl ? 'اتب الباركود هنا (مثال: 6223000100412)' : 'Type barcode here (e.g., 6223000100412)'}
+                    keyboardType="number-pad"
+                    style={{ height: 42 }}
+                    className="w-full bg-[#F3F6F3] border border-border-muted rounded-xl px-4 text-text-primary text-xs mb-3 text-center"
+                  />
 
-                    <View className="flex-row gap-2 w-full">
-                      <TouchableOpacity
-                        onPress={requestPermission}
-                        className="flex-1 bg-[#F3F6F3] py-2.5 rounded-xl justify-center items-center"
-                      >
-                        <Text className="text-text-primary font-outfit-bold text-xs">{isRtl ? 'طلب الإذن' : 'Request Access'}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleBarcodeDetected(manualBarcode)}
-                        className="flex-1 bg-accent-sage py-2.5 rounded-xl justify-center items-center"
-                        disabled={!manualBarcode.trim()}
-                      >
-                        <Text className="text-white font-outfit-bold text-xs">{isRtl ? 'محاكاة المسح' : 'Simulate Scan'}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  // Active Camera scanner
-                  <View className="w-full flex-1 relative justify-center items-center overflow-hidden rounded-2xl">
-                    <CameraView
-                      style={{ width: '100%', height: '100%', borderRadius: 16, overflow: 'hidden' }}
-                      facing="back"
-                      barcodeScannerSettings={{
-                        barcodeTypes: ['ean13', 'upc_a'],
-                      }}
-                      onBarcodeScanned={({ data }) => {
-                        if (data) handleBarcodeDetected(data);
-                      }}
-                    />
-                    <View 
-                      style={{ 
-                        position: 'absolute', 
-                        top: 0, 
-                        left: 0, 
-                        right: 0, 
-                        bottom: 0, 
-                        justifyContent: 'center', 
-                        alignItems: 'center', 
-                        backgroundColor: 'rgba(0,0,0,0.4)', 
-                        borderRadius: 16, 
-                        overflow: 'hidden',
-                        zIndex: 10,
-                        elevation: 10
-                      }}
+                  <View className="flex-row gap-2 w-full">
+                    <TouchableOpacity
+                      onPress={requestPermission}
+                      className="flex-1 bg-[#F3F6F3] py-2.5 rounded-xl justify-center items-center"
                     >
-                      <View className="w-[250] h-[250] border-2 border-white rounded-2xl relative overflow-hidden justify-center items-center bg-transparent">
-                        <Animated.View className="w-full h-[2] bg-nutrient-calories absolute top-0 left-0 z-10" style={laserStyle} />
-                        <View className="w-[200] h-[200] border-2 border-white/50 border-dashed rounded-lg" />
-                        <Text className="color-white text-[11px] font-inter-medium absolute bottom-3">{t.scanBoxMsg}</Text>
-                      </View>
+                      <Text className="text-text-primary font-outfit-bold text-xs">{isRtl ? 'طلب الإذن' : 'Request Access'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleBarcodeDetected(manualBarcode)}
+                      className="flex-1 bg-accent-sage py-2.5 rounded-xl justify-center items-center"
+                      disabled={!manualBarcode.trim()}
+                    >
+                      <Text className="text-white font-outfit-bold text-xs">{isRtl ? 'محاكاة المسح' : 'Simulate Scan'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              // Active Camera scanner view
+              <View className="w-full flex-1 relative justify-center items-center overflow-hidden rounded-2xl">
+                <CameraView
+                  style={{ width: '100%', height: '100%', borderRadius: 16, overflow: 'hidden' }}
+                  facing="back"
+                  barcodeScannerSettings={{
+                    barcodeTypes: ['ean13', 'upc_a'],
+                  }}
+                  onBarcodeScanned={({ data }) => {
+                    if (data && barcodeState === 'scanning') {
+                      handleBarcodeDetected(data);
+                    }
+                  }}
+                />
+                
+                {/* Visual Viewfinder Overlay - only visible when scanning */}
+                {barcodeState === 'scanning' && (
+                  <View 
+                    style={{ 
+                      position: 'absolute', 
+                      top: 0, 
+                      left: 0, 
+                      right: 0, 
+                      bottom: 0, 
+                      justifyContent: 'center', 
+                      alignItems: 'center', 
+                      backgroundColor: 'rgba(0,0,0,0.4)', 
+                      borderRadius: 16, 
+                      overflow: 'hidden',
+                      zIndex: 10,
+                      elevation: 10
+                    }}
+                  >
+                    <View className="w-[250] h-[250] border-2 border-white rounded-2xl relative overflow-hidden justify-center items-center bg-transparent">
+                      <Animated.View className="w-full h-[2] bg-nutrient-calories absolute top-0 left-0 z-10" style={laserStyle} />
+                      <View className="w-[200] h-[200] border-2 border-white/50 border-dashed rounded-lg" />
+                      <Text className="color-white text-[11px] font-inter-medium absolute bottom-3">{t.scanBoxMsg}</Text>
                     </View>
                   </View>
                 )}
               </View>
-            ) : (
-              /* Barcode Match display */
-              <View className="w-full p-6 bg-[#F8F9F8] rounded-[28] border border-border-muted shadow-lg">
-                <View className="flex-row justify-center items-center mb-4">
-                  <Ionicons name="checkmark-circle-sharp" size={36} color="#4C6E58" />
-                  <Text className="text-base font-outfit-bold text-text-primary ml-2">
-                    {isRtl ? 'تم مطابقة الباركود!' : 'Product Barcode Matched!'}
-                  </Text>
-                </View>
-                {selectedFood && renderNutrientPreview()}
+            )}
+
+            {/* Slider overlay when item is detected/matched */}
+            {selectedFood && barcodeState === 'detected' && (
+              <View className="absolute bottom-5 left-5 right-5 z-20">
+                {renderNutrientPreview()}
               </View>
             )}
           </View>
