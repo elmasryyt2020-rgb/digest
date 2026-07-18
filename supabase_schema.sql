@@ -166,3 +166,15 @@ CREATE INDEX IF NOT EXISTS idx_water_logs_user_date ON public.water_logs(user_id
 CREATE INDEX IF NOT EXISTS idx_workout_logs_user_date ON public.workout_logs(user_id, logged_date);
 CREATE INDEX IF NOT EXISTS idx_generated_recipes_user ON public.generated_recipes(user_id);
 CREATE INDEX IF NOT EXISTS idx_meal_plans_user ON public.meal_plans(user_id);
+
+-- 9. Storage Buckets and Policies for PDF Reports
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('reports', 'reports', false) 
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS Policy: Users can upload, read, and delete their own files in reports/
+CREATE POLICY "Users can manage their own reports" ON storage.objects
+    FOR ALL 
+    TO authenticated
+    USING (bucket_id = 'reports' AND auth.uid()::text = (storage.foldername(name))[1])
+    WITH CHECK (bucket_id = 'reports' AND auth.uid()::text = (storage.foldername(name))[1]);
