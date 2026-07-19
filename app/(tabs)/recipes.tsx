@@ -109,12 +109,14 @@ export default function RecipesScreen() {
 
   // Zustand State
   const profile = useDiaryStore((state) => state.profile);
+  const setProfile = useDiaryStore((state) => state.setProfile);
   const incrementRecipesCount = useDiaryStore((state) => state.incrementRecipesCount);
   const addGeneratedRecipe = useDiaryStore((state) => state.addGeneratedRecipe);
   const generatedRecipes = useDiaryStore((state) => state.generatedRecipes);
   const triggerSignUp = useDiaryStore((state) => state.triggerSignUp);
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
   const activeMealPlan = useDiaryStore((state) => state.activeMealPlan);
+  const setActiveMealPlan = useDiaryStore((state) => state.setActiveMealPlan);
   const addFoodLog = useDiaryStore((state) => state.addFoodLog);
   
   const language = profile?.language || 'ar';
@@ -128,6 +130,27 @@ export default function RecipesScreen() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeTab, setActiveTab] = useState<'recommend' | 'pantry' | 'plan'>('recommend');
   
+  const weekdaysList = [
+    { id: 'sunday', label_en: 'Sun', label_ar: 'الأحد' },
+    { id: 'monday', label_en: 'Mon', label_ar: 'الإثنين' },
+    { id: 'tuesday', label_en: 'Tue', label_ar: 'الثلاثاء' },
+    { id: 'wednesday', label_en: 'Wed', label_ar: 'الأربعاء' },
+    { id: 'thursday', label_en: 'Thu', label_ar: 'الخميس' },
+    { id: 'friday', label_en: 'Fri', label_ar: 'الجمعة' },
+    { id: 'saturday', label_en: 'Sat', label_ar: 'السبت' },
+  ];
+  const getTodayWeekday = () => {
+    const dayIndex = new Date().getDay();
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    return days[dayIndex];
+  };
+  const [activeDay, setActiveDay] = useState<string>(getTodayWeekday());
+  const [updatingBudget, setUpdatingBudget] = useState(false);
+
+  const dayPlan = activeMealPlan?.meals ? (
+    (activeMealPlan.meals as any)[activeDay] || activeMealPlan.meals
+  ) : null;
+
   // AI Generator states
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -237,6 +260,61 @@ export default function RecipesScreen() {
       );
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleUpdateBudget = async (level: 'low' | 'medium' | 'high') => {
+    if (!isSignedIn) {
+      triggerSignUp();
+      return;
+    }
+    setUpdatingBudget(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      const { data: planData, error: planError } = await supabase.functions.invoke('generate-meal-plan', {
+        body: {
+          gender: profile?.gender,
+          age: profile?.age,
+          weight_kg: profile?.weight,
+          height_cm: profile?.height,
+          activity_level: profile?.activity_level,
+          health_goal: profile?.health_goal,
+          diet_type: profile?.diet_type,
+          exclusions: profile?.exclusions,
+          country: profile?.country,
+          budget: level,
+        },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (planError || !planData) throw new Error(planError?.message || 'Failed to update plan');
+
+      // Update profile
+      const updatedProfile = { ...profile, budget: level };
+      setProfile(updatedProfile);
+      setActiveMealPlan(planData);
+
+      // sync profile to supabase
+      if (token && session?.user?.id) {
+        await supabase.from('profiles').update({ budget: level }).eq('id', session.user.id);
+        await supabase.from('user_meal_plans').upsert({
+          user_id: session.user.id,
+          plan_data: planData,
+          updated_at: new Date().toISOString()
+        });
+      }
+
+      Alert.alert(
+        isRtl ? 'تم تحديث الميزانية' : 'Budget Updated',
+        isRtl ? 'تم تحديث خطة الوجبات الخاصة بك.' : 'Your meal plan has been updated.'
+      );
+    } catch (error) {
+      console.error(error);
+      Alert.alert(isRtl ? 'خطأ' : 'Error', isRtl ? 'فشل تحديث الخطة' : 'Failed to update plan');
+    } finally {
+      setUpdatingBudget(false);
     }
   };
 
@@ -612,16 +690,74 @@ export default function RecipesScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {activeMealPlan && activeMealPlan.meals ? (
+          {/* Budget Picker */}
+          <View className="mb-6">
+            <Text className={`font-outfit-bold text-sm text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
+              {isRtl ? 'ميزانية الأسبوع' : 'Weekly Budget'}
+            </Text>
+            <View className={`flex-row bg-[#EAECEB] dark:bg-border-muted p-1 rounded-2xl ${isRtl ? 'flex-row-reverse' : ''}`}>
+              {(['low', 'medium', 'high'] as const).map((level) => {
+                const isSelected = profile?.budget === level || (!profile?.budget && level === 'low');
+                const labels = {
+                  low: isRtl ? 'اقتصادية' : 'Low',
+                  medium: isRtl ? 'متوسطة' : 'Medium',
+                  high: isRtl ? 'مرتفعة' : 'High'
+                };
+                return (
+                  <PresstoButton 
+                    key={level}
+                    onPress={() => handleUpdateBudget(level)}
+                    className="flex-1 py-2 rounded-xl items-center"
+                    style={isSelected ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
+                  >
+                    <Text className={`text-xs font-outfit-medium ${isSelected ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
+                      {labels[level]}
+                    </Text>
+                  </PresstoButton>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Weekday Calendar */}
+          <View className="mb-6">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: isRtl ? 'row-reverse' : 'row', gap: 10 }}>
+              {weekdaysList.map((day) => {
+                const isActive = activeDay === day.id;
+                return (
+                  <TouchableOpacity
+                    key={day.id}
+                    onPress={() => setActiveDay(day.id)}
+                    className={`w-14 h-16 rounded-2xl justify-center items-center border ${
+                      isActive ? 'bg-accent-mint border-accent-sage' : 'bg-bg-card border-border-muted'
+                    }`}
+                  >
+                    <Text className={`text-xs font-inter-medium ${isActive ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
+                      {isRtl ? day.label_ar : day.label_en}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {(activeMealPlan && activeMealPlan.meals) ? (
             <View>
               {/* Grocery List Summary Panel */}
               {activeMealPlan.grocery_list && activeMealPlan.grocery_list.length > 0 && (
                 <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-6 shadow-sm">
-                  <View className={`flex-row items-center mb-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <Ionicons name="basket-outline" size={20} color={isDark ? '#5C856C' : '#4C6E58'} />
-                    <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'mr-2' : 'ml-2'}`}>
-                      {isRtl ? 'قائمة البقالة الموحدة' : 'Unified Grocery List'}
-                    </Text>
+                  <View className={`flex-row justify-between items-center mb-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <Ionicons name="basket-outline" size={20} color={isDark ? '#5C856C' : '#4C6E58'} />
+                      <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'mr-2' : 'ml-2'}`}>
+                        {isRtl ? 'قائمة البقالة الموحدة' : 'Unified Grocery List'}
+                      </Text>
+                    </View>
+                    <View className="bg-[#D3B177]/20 px-2 py-1 rounded-full">
+                      <Text className="text-[10px] font-inter-semibold text-[#A9894E]">
+                        {profile?.budget === 'low' || !profile?.budget ? '150 EGP / week' : profile?.budget === 'medium' ? '250 EGP / week' : '350 EGP / week'}
+                      </Text>
+                    </View>
                   </View>
                   <View className="flex-row flex-wrap gap-2">
                     {activeMealPlan.grocery_list.map((item: any, idx: number) => (
@@ -636,8 +772,16 @@ export default function RecipesScreen() {
               )}
 
               {/* Meals list */}
-              {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((category) => {
-                const plannedMeal = activeMealPlan.meals[category];
+              {(() => {
+                const dayPlan = (activeMealPlan.meals as any)?.[activeDay] || (activeMealPlan.meals as any);
+                if (!dayPlan || !dayPlan.breakfast) return (
+                  <View className="items-center py-8">
+                    <Text className="font-outfit-bold text-text-muted">{isRtl ? 'لا توجد وجبات لهذا اليوم' : 'No meals for this day'}</Text>
+                  </View>
+                );
+
+                return (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((category) => {
+                  const plannedMeal = dayPlan[category];
                 if (!plannedMeal) return null;
 
                 const diaryMealType = category === 'snack' ? 'snacks' : category;
@@ -738,7 +882,8 @@ export default function RecipesScreen() {
                     </TouchableOpacity>
                   </View>
                 );
-              })}
+              });
+            })()}
             </View>
           ) : (
             <View className="items-center py-12 px-6">
@@ -754,6 +899,18 @@ export default function RecipesScreen() {
             </View>
           )}
         </ScrollView>
+      )}
+
+      {/* Fullscreen Loading Overlay */}
+      {updatingBudget && (
+        <View className="absolute inset-0 bg-black/50 z-50 justify-center items-center">
+          <View className="bg-bg-card p-6 rounded-3xl items-center">
+            <ActivityIndicator size="large" color="#4C6E58" />
+            <Text className="text-sm font-outfit-bold text-text-primary mt-4">
+              {isRtl ? 'جارٍ تحديث الميزانية...' : 'Updating Budget...'}
+            </Text>
+          </View>
+        </View>
       )}
     </SafeAreaView>
   );
