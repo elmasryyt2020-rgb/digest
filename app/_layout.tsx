@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
-import { View, Platform } from 'react-native';
+import { View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -10,8 +10,6 @@ import { SupabaseSignUpModal } from '@/components/SupabaseSignUpModal';
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
 import { useColorScheme } from 'nativewind';
 import { StatusBar } from 'expo-status-bar';
-import { ThemeProvider, DefaultTheme, DarkTheme } from '@react-navigation/native';
-import { NavigationBar } from 'expo-navigation-bar';
 
 // Suppress Reanimated reading value during component render warnings from third-party libraries
 configureReanimatedLogger({
@@ -77,50 +75,25 @@ export default function RootLayout() {
     setColorScheme(appTheme);
   }, [appTheme, setColorScheme]);
 
-
-
   if (!loaded) {
     return null;
   }
-
-  const customDarkTheme = {
-    ...DarkTheme,
-    colors: {
-      ...DarkTheme.colors,
-      background: '#101412',
-      card: '#161B18',
-    },
-  };
-
-  const customLightTheme = {
-    ...DefaultTheme,
-    colors: {
-      ...DefaultTheme.colors,
-      background: '#F8F9F8',
-      card: '#FFFFFF',
-    },
-  };
 
   return (
     <KeyboardProvider>
       <View style={{ flex: 1 }} className={colorScheme === 'dark' ? 'dark bg-bg-base' : 'bg-bg-base'}>
         <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        {Platform.OS === 'android' && (
-          <NavigationBar style={colorScheme === 'dark' ? 'dark' : 'light'} />
-        )}
-        <ThemeProvider value={colorScheme === 'dark' ? customDarkTheme : customLightTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="welcome" options={{ headerShown: false }} />
-            <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="onboarding_results" options={{ headerShown: false, gestureEnabled: false }} />
-            <Stack.Screen name="sign-up" options={{ headerShown: false }} />
-            <Stack.Screen name="sign-in" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="diary/index" options={{ headerShown: false, presentation: 'modal' }} />
-            <Stack.Screen name="food/search" options={{ headerShown: false }} />
-          </Stack>
-        </ThemeProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
+          <Stack.Screen name="onboarding_results" options={{ headerShown: false, gestureEnabled: false }} />
+          <Stack.Screen name="sign-up" options={{ headerShown: false }} />
+          <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="diary/index" options={{ headerShown: false, presentation: 'modal' }} />
+          <Stack.Screen name="food/search" options={{ headerShown: false }} />
+        </Stack>
       </View>
       
       {/* Global Supabase SignUp Modal triggered when limits are reached */}

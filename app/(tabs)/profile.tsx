@@ -1160,11 +1160,11 @@ export default function ProfileScreen() {
         </View>
 
         {/* Section: Danger Zone */}
-        <View className="bg-red-50/20 dark:bg-red-950/10 rounded-3xl border border-red-100 dark:border-red-950/30 p-5 mb-5 shadow-sm">
-          <Text className={`text-sm font-outfit-bold text-red-800 dark:text-red-400 mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`text-sm font-outfit-bold text-red-600 dark:text-red-400 mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
             {t.dangerZone}
           </Text>
-          <View className="gap-y-3">
+          <View className="divide-y divide-[#F0F2F0] dark:divide-border-muted">
             {/* Clear Cache */}
             <TouchableOpacity 
               onPress={() => {
@@ -1187,19 +1187,43 @@ export default function ProfileScreen() {
                   ]
                 );
               }}
-              className={`flex-row justify-between items-center p-3.5 border border-red-200/30 dark:border-red-900/30 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
+              className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
             >
-              <Text className="text-xs font-outfit-semibold text-red-600 dark:text-red-400">{t.clearCache}</Text>
-              <Ionicons name="trash-bin-outline" size={16} color={isDark ? '#F87171' : '#DC2626'} />
+              <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Ionicons 
+                  name="trash-bin-outline" 
+                  size={18} 
+                  color={isDark ? '#F87171' : '#DC2626'} 
+                  style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} 
+                />
+                <Text className="text-xs font-outfit-semibold text-red-600 dark:text-red-400">{t.clearCache}</Text>
+              </View>
+              <Ionicons 
+                name={isRtl ? "chevron-back" : "chevron-forward"} 
+                size={16} 
+                color={isDark ? '#F87171' : '#DC2626'} 
+              />
             </TouchableOpacity>
 
             {/* Delete Account */}
             <TouchableOpacity 
               onPress={() => setShowDeleteModal(true)}
-              className={`flex-row justify-between items-center p-3.5 border border-red-200/30 dark:border-red-900/30 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
+              className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
             >
-              <Text className="text-xs font-outfit-semibold text-red-600 dark:text-red-400">{t.deleteAccount}</Text>
-              <Ionicons name="person-remove-outline" size={16} color={isDark ? '#F87171' : '#DC2626'} />
+              <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Ionicons 
+                  name="person-remove-outline" 
+                  size={18} 
+                  color={isDark ? '#F87171' : '#DC2626'} 
+                  style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} 
+                />
+                <Text className="text-xs font-outfit-semibold text-red-600 dark:text-red-400">{t.deleteAccount}</Text>
+              </View>
+              <Ionicons 
+                name={isRtl ? "chevron-back" : "chevron-forward"} 
+                size={16} 
+                color={isDark ? '#F87171' : '#DC2626'} 
+              />
             </TouchableOpacity>
 
             {/* Sign Out (Only if signed in) */}
@@ -1215,10 +1239,22 @@ export default function ProfileScreen() {
                     ]
                   );
                 }}
-                className={`flex-row justify-between items-center p-3.5 border border-border-muted rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
+                className={`flex-row justify-between items-center py-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
               >
-                <Text className="text-xs font-outfit-semibold text-text-primary">{t.signOutBtn}</Text>
-                <Ionicons name="log-out-outline" size={16} color={isDark ? '#E5EAE5' : '#1A1E1C'} />
+                <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <Ionicons 
+                    name="log-out-outline" 
+                    size={18} 
+                    color={isDark ? '#8A9690' : '#626A66'} 
+                    style={isRtl ? { marginLeft: 8 } : { marginRight: 8 }} 
+                  />
+                  <Text className="text-xs font-outfit-semibold text-text-primary">{t.signOutBtn}</Text>
+                </View>
+                <Ionicons 
+                  name={isRtl ? "chevron-back" : "chevron-forward"} 
+                  size={16} 
+                  color={isDark ? '#8A9690' : '#9CA19E'} 
+                />
               </TouchableOpacity>
             )}
           </View>
