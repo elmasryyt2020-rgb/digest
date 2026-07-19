@@ -277,8 +277,8 @@ export default function RecipesScreen() {
         body: {
           gender: profile?.gender,
           age: profile?.age,
-          weight_kg: profile?.weight,
-          height_cm: profile?.height,
+          weight_kg: profile?.weight_kg,
+          height_cm: profile?.height_cm,
           activity_level: profile?.activity_level,
           health_goal: profile?.health_goal,
           diet_type: profile?.diet_type,
@@ -772,15 +772,12 @@ export default function RecipesScreen() {
               )}
 
               {/* Meals list */}
-              {(() => {
-                const dayPlan = (activeMealPlan.meals as any)?.[activeDay] || (activeMealPlan.meals as any);
-                if (!dayPlan || !dayPlan.breakfast) return (
-                  <View className="items-center py-8">
-                    <Text className="font-outfit-bold text-text-muted">{isRtl ? 'لا توجد وجبات لهذا اليوم' : 'No meals for this day'}</Text>
-                  </View>
-                );
-
-                return (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((category) => {
+              {!dayPlan || !dayPlan.breakfast ? (
+                <View className="items-center py-8">
+                  <Text className="font-outfit-bold text-text-muted">{isRtl ? 'لا توجد وجبات لهذا اليوم' : 'No meals for this day'}</Text>
+                </View>
+              ) : (
+                (['breakfast', 'lunch', 'dinner', 'snack'] as const).map((category) => {
                   const plannedMeal = dayPlan[category];
                 if (!plannedMeal) return null;
 
@@ -882,8 +879,8 @@ export default function RecipesScreen() {
                     </TouchableOpacity>
                   </View>
                 );
-              });
-            })()}
+              })
+            )}
             </View>
           ) : (
             <View className="items-center py-12 px-6">
