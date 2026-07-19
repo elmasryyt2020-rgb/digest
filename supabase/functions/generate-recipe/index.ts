@@ -109,7 +109,21 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
     const geminiData = await geminiResponse.json();
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const cleaned = stripFences(rawText);
-    const parsedRecipe = JSON.parse(cleaned);
+
+    let parsedRecipe;
+    try {
+      parsedRecipe = JSON.parse(cleaned);
+    } catch (e) {
+      throw new Error(`Failed to parse recipes JSON output from AI: ${e.message}. Raw text: ${cleaned.slice(0, 150)}`);
+    }
+
+    if (!parsedRecipe || typeof parsedRecipe !== 'object') {
+      throw new Error('AI output is not a valid JSON object');
+    }
+
+    if (!Array.isArray(parsedRecipe.ingredients)) {
+      throw new Error('AI output is missing ingredients list or it is not an array');
+    }
 
     // Verify and enrich ingredients macros against foods_cache DB
     let total_calories = 0;
@@ -119,11 +133,16 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
     const finalIngredients = [];
 
     for (const ing of parsedRecipe.ingredients) {
-      const normalized = ing.name_en.toLowerCase().trim();
+      if (!ing || typeof ing !== 'object') continue;
+      const nameEn = String(ing.name_en || 'Unknown Food');
+      const nameAr = String(ing.name_ar || nameEn);
+      const normalized = nameEn.toLowerCase().trim();
+
       const { data: cachedRows } = await supabase
         .from('foods_cache')
         .select('*')
         .ilike('name_en', normalized)
+        .order('source', { ascending: true }) // Prioritize verified sources (usda/off) over gemini
         .limit(1);
 
       let macroSource = null;
@@ -131,10 +150,10 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
         macroSource = cachedRows[0];
       }
 
-      let calories_per_100g = Number(ing.est_calories_per_100g || 0);
-      let protein_per_100g = Number(ing.est_protein_per_100g || 0);
-      let carbs_per_100g = Number(ing.est_carbs_per_100g || 0);
-      let fat_per_100g = Number(ing.est_fat_per_100g || 0);
+      let calories_per_100g = Number(ing.est_calories_per_100g ?? 0);
+      let protein_per_100g = Number(ing.est_protein_per_100g ?? 0);
+      let carbs_per_100g = Number(ing.est_carbs_per_100g ?? 0);
+      let fat_per_100g = Number(ing.est_fat_per_100g ?? 0);
 
       if (macroSource) {
         calories_per_100g = Number(macroSource.calories_per_100g);
@@ -145,10 +164,10 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
         // Store fallback in DB
         const hash = await sha256Hex(`${normalized}|${calories_per_100g}|${protein_per_100g}|${carbs_per_100g}|${fat_per_100g}`);
         const id = `gemini:${hash}`;
-        await supabase.from('foods_cache').upsert({
+        const { error: upsertError } = await supabase.from('foods_cache').upsert({
           id,
-          name_en: ing.name_en,
-          name_ar: ing.name_ar || ing.name_en,
+          name_en: nameEn,
+          name_ar: nameAr,
           source: 'gemini',
           calories_per_100g,
           protein_per_100g,
@@ -156,6 +175,9 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
           fat_per_100g,
           micros: {},
         });
+        if (upsertError) {
+          console.error(`Failed to upsert generated ingredient ${nameEn} to foods_cache:`, upsertError);
+        }
       }
 
       const weight_g = Number(ing.weight_g || 0);
@@ -165,21 +187,21 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
       total_fat_g += (fat_per_100g / 100) * weight_g;
 
       finalIngredients.push({
-        name_en: ing.name_en,
-        name_ar: ing.name_ar,
+        name_en: nameEn,
+        name_ar: nameAr,
         weight_g,
       });
     }
 
     // Return the completed recipe object
     const generatedRecipe = {
-      title_en: parsedRecipe.title_en,
-      title_ar: parsedRecipe.title_ar,
-      description_en: parsedRecipe.description_en,
-      description_ar: parsedRecipe.description_ar,
+      title_en: String(parsedRecipe.title_en || 'AI Generated Recipe'),
+      title_ar: String(parsedRecipe.title_ar || 'وصفة بالذكاء الاصطناعي'),
+      description_en: String(parsedRecipe.description_en || ''),
+      description_ar: String(parsedRecipe.description_ar || ''),
       ingredients: finalIngredients,
-      steps_en: parsedRecipe.steps_en,
-      steps_ar: parsedRecipe.steps_ar,
+      steps_en: Array.isArray(parsedRecipe.steps_en) ? parsedRecipe.steps_en.map(String) : [],
+      steps_ar: Array.isArray(parsedRecipe.steps_ar) ? parsedRecipe.steps_ar.map(String) : [],
       total_calories: Math.round(total_calories),
       total_protein_g: Math.round(total_protein_g * 10) / 10,
       total_carbs_g: Math.round(total_carbs_g * 10) / 10,
@@ -187,7 +209,7 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
       image_url: 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80',
       country_origin: country || 'EG',
       category: parsedRecipe.category || 'lunch',
-      tags: parsedRecipe.tags || ['AI Generated'],
+      tags: Array.isArray(parsedRecipe.tags) ? parsedRecipe.tags.map(String) : ['AI Generated'],
     };
 
     return new Response(JSON.stringify(generatedRecipe), {
