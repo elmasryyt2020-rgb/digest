@@ -57,7 +57,7 @@ function OnboardShell({
 
         {/* Progressive step dots */}
         <View className="flex-row items-center space-x-1.5 gap-1.5">
-          {Array.from({ length: total }).map((_, i) => {
+          {Array.from({ length: 4 }).map((_, i) => {
             const activeStep = step === 4 ? 3 : step;
             return (
               <View
@@ -115,7 +115,7 @@ export default function OnboardingScreen() {
   const isDark = colorScheme === 'dark';
 
   // Form states
-  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0); // 0: Body Details, 1: Goals & Activity, 2: Diet & Preferences, 3: Weekly Budget, 4: Calculations Loading
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0); // 0: Body Details, 1: Goals & Activity, 2: Diet & Preferences, 3: Budget, 4: Calculations Loading
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [birthYear, setBirthYear] = useState('1998');
   const [height, setHeight] = useState('175');
@@ -198,7 +198,7 @@ export default function OnboardingScreen() {
           diet_type: dietType,
           exclusions: exclusions,
           disliked_ingredients: [],
-          budget,
+          budget: budget,
         };
 
         const targets = calculateNutrientTargets(baseProfile);
