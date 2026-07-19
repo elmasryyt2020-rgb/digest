@@ -114,7 +114,6 @@ serve(async (req) => {
       throw new Error('Missing required biometric details');
     }
 
-    // 1. Calculate targets locally to seed and direct the prompt constraints
     const targets = calculateNutrientTargets({
       weight_kg: Number(weight_kg),
       height_cm: Number(height_cm),
@@ -140,28 +139,28 @@ serve(async (req) => {
     };
     const chosenGuide = budgetGuides[budget as 'low' | 'medium' | 'high'] || budgetGuides.medium;
 
-    // 2. Build Gemini prompt for weekly 7-day meal plan generation
     const systemPrompt = `You are a professional dietitian and sports nutritionist.
-Create a highly customized weekly 7-day meal plan consisting of the days: "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday".
-For each day, provide 4 meals: "breakfast", "lunch", "dinner", and "snack".
+Create a highly customized 7-day weekly meal plan containing: "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday".
+Each day must have 4 meals: "breakfast", "lunch", "dinner", and "snack".
 
 Biometric Profiles & Guidelines:
-- Target Calories: ${targets.target_calories} kcal / day
-- Target Protein: ${targets.target_protein_g}g / day
-- Target Carbs: ${targets.target_carbs_g}g / day
-- Target Fat: ${targets.target_fat_g}g / day
+- Target Calories (per day): ${targets.target_calories} kcal
+- Target Protein (per day): ${targets.target_protein_g}g
+- Target Carbs (per day): ${targets.target_carbs_g}g
+- Target Fat (per day): ${targets.target_fat_g}g
 - Diet Type Preference: ${diet_type}
 - Food Exclusions / Allergies: ${exclusions.join(', ') || 'none'}
 - Localized Style Priority: ${country === 'EG' ? 'Egyptian/Middle Eastern' : 'British/Western'}
-- Grocery Budget Tier: ${budget} (${chosenGuide.limit})
-- Mandatory Allowed Baskets Ingredients: ${chosenGuide.staples}
+- Budget Tier: ${budget}
+- Budget Limit: ${chosenGuide.limit}
+- Allowed Staples: ${chosenGuide.staples}
 
 Constraints:
-1. Every single day's total calories and macros must be close to the targets above.
-2. The recipes across the week must primarily utilize the allowed ingredients matching the selected budget tier.
+1. Make sure the sum of calories and macros of the 4 meals each day is extremely close to the targets above.
+2. Provide recipes that are realistic, healthy, and culinary-sound. Use the Allowed Staples primarily.
 3. Every recipe must have descriptions and steps in BOTH English and Arabic.
 4. For ingredients, provide both english name (name_en) and arabic name (name_ar).
-5. For each ingredient, estimate realistic nutrient values per 100g: "est_calories_per_100g", "est_protein_per_100g", "est_carbs_per_100g", "est_fat_per_100g".
+5. For each ingredient, estimate realistic nutrient values per 100g: "est_calories_per_100g", "est_protein_per_100g", "est_carbs_per_100g", "est_fat_per_100g". These will be used for verification search.
 6. Provide a search query 'unsplash_query' for food photography images.
 
 Return a raw JSON payload matching this exact schema. Do not output markdown code fences or conversational text:
@@ -171,12 +170,12 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
       "breakfast": {
         "title_en": "English breakfast title",
         "title_ar": "اسم الفطور بالعربية",
-        "description_en": "English description summarizing recipe nutrition & health benefits",
-        "description_ar": "وصف عربي يلخص الفوائد الصحية والغذائية للوجبة",
+        "description_en": "English description",
+        "description_ar": "وصف عربي",
         "ingredients": [
           {
-            "name_en": "Ingredient name in English (e.g. Oats)",
-            "name_ar": "اسم المكون بالعربية",
+            "name_en": "Oats",
+            "name_ar": "شوفان",
             "weight_g": 50,
             "est_calories_per_100g": 389,
             "est_protein_per_100g": 16.9,
@@ -192,7 +191,7 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
           "الخطوة الأولى بالعربية",
           "الخطوة الثانية بالعربية"
         ],
-        "tags": ["Healthy", "High Fiber"],
+        "tags": ["Healthy"],
         "unsplash_query": "oatmeal bowl"
       },
       "lunch": { ... },
@@ -232,115 +231,115 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
     try {
       parsedPlan = JSON.parse(cleaned);
     } catch (e) {
-      throw new Error(`Failed to parse meal plan JSON output from AI: ${e.message}. Raw text: ${cleaned.slice(0, 150)}`);
+      throw new Error(`Failed to parse meal plan: ${e.message}`);
     }
 
-    if (!parsedPlan || !parsedPlan.meals) {
-      throw new Error('AI output is missing meals structure');
-    }
-
-    const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
     const categories = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 
-    // 3. Gather unique ingredients across the entire week plan to batch ground them
-    const uniqueIngs = new Map<string, any>();
-    for (const day of weekdays) {
-      const dayMeals = parsedPlan.meals[day];
-      if (!dayMeals) continue;
+    const uniqueIngredientsMap: Record<string, any> = {};
+    for (const day of days) {
+      if (!parsedPlan.meals[day]) throw new Error(`Missing day ${day}`);
       for (const cat of categories) {
-        const meal = dayMeals[cat];
-        if (!meal || !Array.isArray(meal.ingredients)) continue;
+        const meal = parsedPlan.meals[day][cat];
+        if (!meal || !Array.isArray(meal.ingredients)) throw new Error(`Invalid ingredients in ${day} ${cat}`);
         for (const ing of meal.ingredients) {
-          if (!ing || !ing.name_en) continue;
-          uniqueIngs.set(ing.name_en.toLowerCase().trim(), ing);
+          const nameEn = String(ing.name_en || 'Unknown Food');
+          const normalized = nameEn.toLowerCase().trim();
+          if (!uniqueIngredientsMap[normalized]) {
+            uniqueIngredientsMap[normalized] = {
+              name_en: nameEn,
+              name_ar: String(ing.name_ar || nameEn),
+              est_calories_per_100g: Number(ing.est_calories_per_100g ?? 0),
+              est_protein_per_100g: Number(ing.est_protein_per_100g ?? 0),
+              est_carbs_per_100g: Number(ing.est_carbs_per_100g ?? 0),
+              est_fat_per_100g: Number(ing.est_fat_per_100g ?? 0)
+            };
+          }
         }
       }
     }
 
-    // Ground unique ingredients in parallel
-    const groundedMap = new Map<string, any>();
-    await Promise.all(Array.from(uniqueIngs.keys()).map(async (normalized) => {
-      // Check cache first
-      const { data: cachedRows } = await supabase
-        .from('foods_cache')
-        .select('*')
-        .ilike('name_en', normalized)
-        .order('source', { ascending: false })
-        .limit(1);
+    const uniqueNormalizedNames = Object.keys(uniqueIngredientsMap);
+    const groundedIngredients: Record<string, any> = {};
 
-      if (cachedRows && cachedRows.length > 0) {
-        groundedMap.set(normalized, cachedRows[0]);
-      } else {
-        // Query USDA
-        const ing = uniqueIngs.get(normalized);
-        let calories_per_100g = Number(ing.est_calories_per_100g ?? 0);
-        let protein_per_100g = Number(ing.est_protein_per_100g ?? 0);
-        let carbs_per_100g = Number(ing.est_carbs_per_100g ?? 0);
-        let fat_per_100g = Number(ing.est_fat_per_100g ?? 0);
+    await Promise.all(
+      uniqueNormalizedNames.map(async (normalized) => {
+        const ing = uniqueIngredientsMap[normalized];
+        let calories_per_100g = ing.est_calories_per_100g;
+        let protein_per_100g = ing.est_protein_per_100g;
+        let carbs_per_100g = ing.est_carbs_per_100g;
+        let fat_per_100g = ing.est_fat_per_100g;
+
+        const { data: cachedRows } = await supabase
+          .from('foods_cache')
+          .select('*')
+          .ilike('name_en', normalized)
+          .order('source', { ascending: false })
+          .limit(1);
+
         let fdcId = null;
-
-        try {
-          const usdaUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(normalized)}&pageSize=1&api_key=${usdaApiKey}`;
-          const usdaRes = await fetch(usdaUrl);
-          if (usdaRes.ok) {
-            const usdaData = await usdaRes.json();
-            if (usdaData.foods && usdaData.foods.length > 0) {
-              const food = usdaData.foods[0];
-              fdcId = food.fdcId;
-              
-              const getNutrientVal = (id: number) => {
-                const nut = food.foodNutrients?.find((n: any) => n.nutrientId === id || n.nutrientNumber === String(id));
-                return nut ? Number(nut.value) : 0;
-              };
-
-              const usdaKcal = getNutrientVal(1008);
-              if (usdaKcal > 0) {
-                calories_per_100g = usdaKcal;
-                protein_per_100g = getNutrientVal(1003);
-                carbs_per_100g = getNutrientVal(1005);
-                fat_per_100g = getNutrientVal(1004);
+        if (cachedRows && cachedRows.length > 0) {
+          const row = cachedRows[0];
+          calories_per_100g = Number(row.calories_per_100g);
+          protein_per_100g = Number(row.protein_per_100g);
+          carbs_per_100g = Number(row.carbs_per_100g);
+          fat_per_100g = Number(row.fat_per_100g);
+        } else {
+          try {
+            const usdaUrl = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(normalized)}&pageSize=1&api_key=${usdaApiKey}`;
+            const usdaRes = await fetch(usdaUrl);
+            if (usdaRes.ok) {
+              const usdaData = await usdaRes.json();
+              if (usdaData.foods && usdaData.foods.length > 0) {
+                const food = usdaData.foods[0];
+                fdcId = food.fdcId;
+                const getNut = (id: number) => food.foodNutrients?.find((n: any) => n.nutrientId === id || n.nutrientNumber === String(id))?.value || 0;
+                const kcal = getNut(1008);
+                if (kcal > 0) {
+                  calories_per_100g = Number(kcal);
+                  protein_per_100g = Number(getNut(1003));
+                  carbs_per_100g = Number(getNut(1005));
+                  fat_per_100g = Number(getNut(1004));
+                }
               }
             }
+          } catch (usdaErr) {
+            console.error('USDA API lookup failed for', normalized, usdaErr);
           }
-        } catch (usdaErr) {
-          console.error('USDA API lookup failed:', usdaErr);
+          
+          const cacheId = fdcId ? `usda:${fdcId}` : `gemini:${await sha256Hex(`${normalized}|${calories_per_100g}|${protein_per_100g}|${carbs_per_100g}|${fat_per_100g}`)}`;
+          const { error: upsertErr } = await supabase.from('foods_cache').upsert({
+            id: cacheId,
+            name_en: ing.name_en,
+            name_ar: ing.name_ar,
+            source: fdcId ? 'usda' : 'gemini',
+            calories_per_100g,
+            protein_per_100g,
+            carbs_per_100g,
+            fat_per_100g,
+            micros: {},
+          });
+          if (upsertErr) {
+            console.error(`Failed to upsert grounded ingredient ${ing.name_en} to foods_cache:`, upsertErr);
+          }
         }
 
-        const ingObject = {
-          calories_per_100g,
-          protein_per_100g,
-          carbs_per_100g,
-          fat_per_100g,
+        groundedIngredients[normalized] = {
           name_en: ing.name_en,
-          name_ar: ing.name_ar || ing.name_en,
-        };
-
-        groundedMap.set(normalized, ingObject);
-
-        // Store in foods_cache asynchronously
-        const cacheId = fdcId ? `usda:${fdcId}` : `gemini:${await sha256Hex(`${normalized}|${calories_per_100g}`)}`;
-        const { error: upsertErr } = await supabase.from('foods_cache').upsert({
-          id: cacheId,
-          name_en: ingObject.name_en,
-          name_ar: ingObject.name_ar,
-          source: fdcId ? 'usda' : 'gemini',
+          name_ar: ing.name_ar,
           calories_per_100g,
           protein_per_100g,
           carbs_per_100g,
           fat_per_100g,
-          micros: {},
-        });
-        if (upsertErr) {
-          console.error(`Failed to upsert grounded ingredient ${ingObject.name_en} to foods_cache:`, upsertErr);
-        }
-      }
-    }));
+        };
+      })
+    );
 
-    // Map grounded ingredients back to the 7-day meals structure and calculate daily totals
     const finalMeals: Record<string, any> = {};
     const rawGroceryMap: Record<string, { name_ar: string; weight_g: number }> = {};
 
-    for (const day of weekdays) {
+    for (const day of days) {
       finalMeals[day] = {};
       const dayMeals = parsedPlan.meals[day];
       if (!dayMeals) continue;
@@ -356,8 +355,15 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
         const finalIngredients = [];
 
         for (const ing of meal.ingredients || []) {
-          const key = ing.name_en.toLowerCase().trim();
-          const grounded = groundedMap.get(key) || ing;
+          const key = (ing.name_en || 'Unknown Food').toLowerCase().trim();
+          const grounded = groundedIngredients[key] || {
+            name_en: String(ing.name_en || 'Unknown Food'),
+            name_ar: String(ing.name_ar || ing.name_en),
+            calories_per_100g: Number(ing.est_calories_per_100g || 0),
+            protein_per_100g: Number(ing.est_protein_per_100g || 0),
+            carbs_per_100g: Number(ing.est_carbs_per_100g || 0),
+            fat_per_100g: Number(ing.est_fat_per_100g || 0)
+          };
 
           const weight_g = Number(ing.weight_g || 0);
           total_calories += (Number(grounded.calories_per_100g || 0) / 100) * weight_g;
@@ -367,7 +373,7 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
 
           finalIngredients.push({
             name_en: grounded.name_en,
-            name_ar: grounded.name_ar || ing.name_ar,
+            name_ar: grounded.name_ar,
             weight_g,
             calories_per_100g: grounded.calories_per_100g,
             protein_per_100g: grounded.protein_per_100g,
@@ -380,7 +386,7 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
             rawGroceryMap[key].weight_g += weight_g;
           } else {
             rawGroceryMap[key] = {
-              name_ar: grounded.name_ar || ing.name_ar,
+              name_ar: grounded.name_ar,
               weight_g,
             };
           }
