@@ -142,7 +142,7 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
         .from('foods_cache')
         .select('*')
         .ilike('name_en', normalized)
-        .order('source', { ascending: true }) // Prioritize verified sources (usda/off) over gemini
+        .order('source', { ascending: false }) // Prioritize verified sources (usda/off) over gemini
         .limit(1);
 
       let macroSource = null;
