@@ -40,7 +40,11 @@ export default function OnboardingResultsScreen() {
   // Load initial 4 meals matching preferences
   useEffect(() => {
     if (activeMealPlan && activeMealPlan.meals) {
-      setSelectedMeals(activeMealPlan.meals);
+      if ('sunday' in activeMealPlan.meals) {
+        setSelectedMeals(activeMealPlan.meals.sunday);
+      } else {
+        setSelectedMeals(activeMealPlan.meals);
+      }
       return;
     }
 
@@ -118,12 +122,21 @@ export default function OnboardingResultsScreen() {
       };
 
       if (activeMealPlan) {
+        const currentMeals = activeMealPlan.meals;
+        const updatedMeals = 'sunday' in (currentMeals as any) ? {
+          ...(currentMeals as any),
+          sunday: {
+            ...(currentMeals as any).sunday,
+            [recipe.category]: recipe as any
+          }
+        } : {
+          ...(currentMeals as any),
+          [recipe.category]: recipe as any
+        };
+
         setActiveMealPlan({
           ...activeMealPlan,
-          meals: {
-            ...activeMealPlan.meals,
-            [recipe.category]: recipe as any,
-          }
+          meals: updatedMeals as any
         });
       }
 
