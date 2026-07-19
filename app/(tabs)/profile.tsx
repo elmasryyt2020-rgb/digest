@@ -1160,8 +1160,8 @@ export default function ProfileScreen() {
         </View>
 
         {/* Section: Danger Zone */}
-        <View className="bg-bg-card rounded-3xl border border-red-100 p-5 mb-5 shadow-sm bg-red-50/10">
-          <Text className={`text-sm font-outfit-bold text-red-800 mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+        <View className="bg-red-50/20 dark:bg-red-950/10 rounded-3xl border border-red-100 dark:border-red-950/30 p-5 mb-5 shadow-sm">
+          <Text className={`text-sm font-outfit-bold text-red-800 dark:text-red-400 mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
             {t.dangerZone}
           </Text>
           <View className="gap-y-3">
@@ -1187,19 +1187,19 @@ export default function ProfileScreen() {
                   ]
                 );
               }}
-              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
+              className={`flex-row justify-between items-center p-3.5 border border-red-200/30 dark:border-red-900/30 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
             >
-              <Text className="text-xs font-outfit-semibold text-red-600">{t.clearCache}</Text>
-              <Ionicons name="trash-bin-outline" size={16} color="#DC2626" />
+              <Text className="text-xs font-outfit-semibold text-red-600 dark:text-red-400">{t.clearCache}</Text>
+              <Ionicons name="trash-bin-outline" size={16} color={isDark ? '#F87171' : '#DC2626'} />
             </TouchableOpacity>
 
             {/* Delete Account */}
             <TouchableOpacity 
               onPress={() => setShowDeleteModal(true)}
-              className={`flex-row justify-between items-center p-3.5 border border-red-200/50 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
+              className={`flex-row justify-between items-center p-3.5 border border-red-200/30 dark:border-red-900/30 rounded-xl bg-bg-card ${isRtl ? 'flex-row-reverse' : ''}`}
             >
-              <Text className="text-xs font-outfit-semibold text-red-600">{t.deleteAccount}</Text>
-              <Ionicons name="person-remove-outline" size={16} color="#DC2626" />
+              <Text className="text-xs font-outfit-semibold text-red-600 dark:text-red-400">{t.deleteAccount}</Text>
+              <Ionicons name="person-remove-outline" size={16} color={isDark ? '#F87171' : '#DC2626'} />
             </TouchableOpacity>
 
             {/* Sign Out (Only if signed in) */}

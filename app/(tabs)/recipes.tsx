@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useColorScheme } from 'nativewind';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { localRecipes, RecipeType } from '@/data/localRecipes';
@@ -32,6 +33,8 @@ const commonIngredients = [
 
 export default function RecipesScreen() {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   // Zustand State
   const profile = useDiaryStore((state) => state.profile);
@@ -137,20 +140,20 @@ export default function RecipesScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       {/* Header */}
-      <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+      <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
         <View className="w-16" />
         <Text className="text-base font-outfit-bold text-text-primary">{t.title}</Text>
         <View className="w-16" />
       </View>
 
       {/* Tab Selector Segment */}
-      <View className="flex-row bg-[#EAECEB] p-1 rounded-2xl mx-5 mt-4">
+      <View className="flex-row bg-[#EAECEB] dark:bg-border-muted p-1 rounded-2xl mx-5 mt-4">
         <PresstoButton 
           onPress={() => setActiveTab('recommend')}
           className="flex-1 py-2 rounded-xl items-center"
-          style={activeTab === 'recommend' ? styles.activeTab : null}
+          style={activeTab === 'recommend' ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
         >
           <Text className={`text-xs font-outfit-medium ${activeTab === 'recommend' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
             {t.recommend}
@@ -159,7 +162,7 @@ export default function RecipesScreen() {
         <PresstoButton 
           onPress={() => setActiveTab('pantry')}
           className="flex-1 py-2 rounded-xl items-center"
-          style={activeTab === 'pantry' ? styles.activeTab : null}
+          style={activeTab === 'pantry' ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
         >
           <Text className={`text-xs font-outfit-medium ${activeTab === 'pantry' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
             {t.pantry}
@@ -174,7 +177,7 @@ export default function RecipesScreen() {
             <PresstoButton
               key={recipe.id}
               onPress={() => router.push(`/recipes/${recipe.id}` as any)}
-              className="bg-white rounded-3xl border border-border-muted mb-5 overflow-hidden shadow-sm"
+              className="bg-bg-card rounded-3xl border border-border-muted mb-5 overflow-hidden shadow-sm"
             >
               <Image source={{ uri: recipe.image_url }} className="w-full h-40 resize-cover" />
               <View className="p-4">
@@ -217,13 +220,13 @@ export default function RecipesScreen() {
           {isGenerating ? (
             /* Shimmer loading skeleton */
             <View className="flex-1 justify-center items-center pb-20">
-              <ActivityIndicator size="large" color="#4C6E58" />
+              <ActivityIndicator size="large" color={isDark ? '#5C856C' : '#4C6E58'} />
               <Text className="mt-6 text-sm font-outfit-bold text-text-primary">
                 {isRtl ? 'جارٍ صياغة وصفة مغذية مخصصة...' : 'Crafting custom nutritious recipe...'}
               </Text>
             </View>
           ) : (
-            <View className="flex-1 justify-between">
+            <View className="flex-1 justify-between" style={{ minHeight: 450 }}>
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text className={`text-sm font-outfit-bold text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
                   {t.ingredientsTitle}
@@ -238,7 +241,7 @@ export default function RecipesScreen() {
                       <TouchableOpacity
                         key={ing.name_en}
                         onPress={() => handleToggleIngredient(name)}
-                        className={`flex-row items-center bg-white border border-border-muted px-3 py-2 rounded-2xl mr-2 mb-2 ${
+                        className={`flex-row items-center bg-bg-card border border-border-muted px-3 py-2 rounded-2xl mr-2 mb-2 ${
                           isSelected ? 'bg-accent-mint border-accent-sage' : ''
                         }`}
                       >
@@ -254,7 +257,7 @@ export default function RecipesScreen() {
                 {/* Custom input */}
                 <View className={`flex-row items-center mt-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <TextInput
-                    className={`flex-1 bg-white border border-border-muted rounded-2xl px-4 py-3 font-inter-regular text-xs text-text-primary ${
+                    className={`flex-1 bg-bg-card border border-border-muted rounded-2xl px-4 py-3 font-inter-regular text-xs text-text-primary ${
                       isRtl ? 'text-right' : 'text-left'
                     }`}
                     placeholder={t.addCustom}

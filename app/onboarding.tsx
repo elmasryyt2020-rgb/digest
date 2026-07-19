@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from 'nativewind';
 import * as Localization from 'expo-localization';
 
 import { useDiaryStore, calculateNutrientTargets } from '@/store/useDiaryStore';
@@ -42,13 +43,15 @@ function OnboardShell({
   onNext,
 }: OnboardShellProps) {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   return (
     <View className="flex-1 bg-bg-base">
       {/* Header */}
-      <View className="flex-row justify-between items-center px-6 py-4 border-b border-border-muted bg-white">
+      <View className="flex-row justify-between items-center px-6 py-4 border-b border-border-muted bg-bg-card">
         <View className="flex-row items-center">
-          <Ionicons name="heart" size={20} color="#4C6E58" />
+          <Ionicons name="heart" size={20} color={isDark ? '#5C856C' : '#4C6E58'} />
           <Text className="font-outfit-bold text-lg text-text-primary ml-1.5">digest</Text>
         </View>
 
@@ -60,7 +63,7 @@ function OnboardShell({
               className="h-1.5 rounded-full"
               style={{
                 width: i === step ? 20 : 6,
-                backgroundColor: i <= step ? '#4C6E58' : 'rgba(98, 106, 102, 0.15)',
+                backgroundColor: i <= step ? (isDark ? '#5C856C' : '#4C6E58') : (isDark ? 'rgba(138, 150, 144, 0.15)' : 'rgba(98, 106, 102, 0.15)'),
               }}
             />
           ))}
@@ -83,7 +86,7 @@ function OnboardShell({
 
       {/* Footer CTA */}
       {showFooter && (
-        <View className="p-6 bg-white border-t border-border-muted">
+        <View className="p-6 bg-bg-card border-t border-border-muted">
           <PresstoButton
             disabled={ctaDisabled}
             onPress={onNext}
@@ -102,6 +105,8 @@ function OnboardShell({
 export default function OnboardingScreen() {
   const router = useRouter();
   const setProfile = useDiaryStore((state) => state.setProfile);
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   // Form states
   const [step, setStep] = useState<0 | 1 | 2 | 3>(0); // 0: Body Details, 1: Goals & Activity, 2: Diet & Preferences, 3: Calculations Loading
@@ -238,7 +243,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -254,7 +259,7 @@ export default function OnboardingScreen() {
                 Step 1 of 3 · Body Details
               </Text>
               <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
-                Tell us about <Text style={{ fontStyle: 'italic' }}>yourself</Text>.
+                Your body details.
               </Text>
               <Text className="font-inter text-sm text-text-muted leading-relaxed mb-6">
                 Your body details help calculate metabolic rates accurately using the Mifflin-St Jeor formula.
@@ -268,11 +273,11 @@ export default function OnboardingScreen() {
                 <View className="flex-row gap-4">
                   <TouchableOpacity
                     onPress={() => setGender('male')}
-                    className={`flex-1 p-4 border rounded-2xl bg-white items-center flex-row justify-center ${
-                      gender === 'male' ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                    className={`flex-1 p-4 border rounded-2xl bg-bg-card items-center flex-row justify-center ${
+                      gender === 'male' ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
                     }`}
                   >
-                    <Ionicons name="male" size={18} color={gender === 'male' ? '#4C6E58' : '#626A66'} />
+                    <Ionicons name="male" size={18} color={gender === 'male' ? (isDark ? '#5C856C' : '#4C6E58') : (isDark ? '#8A9690' : '#626A66')} />
                     <Text className={`text-sm font-outfit-bold ml-2 ${gender === 'male' ? 'text-accent-sage' : 'text-text-muted'}`}>
                       Male
                     </Text>
@@ -280,11 +285,11 @@ export default function OnboardingScreen() {
 
                   <TouchableOpacity
                     onPress={() => setGender('female')}
-                    className={`flex-1 p-4 border rounded-2xl bg-white items-center flex-row justify-center ${
-                      gender === 'female' ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                    className={`flex-1 p-4 border rounded-2xl bg-bg-card items-center flex-row justify-center ${
+                      gender === 'female' ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
                     }`}
                   >
-                    <Ionicons name="female" size={18} color={gender === 'female' ? '#4C6E58' : '#626A66'} />
+                    <Ionicons name="female" size={18} color={gender === 'female' ? (isDark ? '#5C856C' : '#4C6E58') : (isDark ? '#8A9690' : '#626A66')} />
                     <Text className={`text-sm font-outfit-bold ml-2 ${gender === 'female' ? 'text-accent-sage' : 'text-text-muted'}`}>
                       Female
                     </Text>
@@ -298,7 +303,7 @@ export default function OnboardingScreen() {
                   Year of Birth
                 </Text>
                 <TextInput
-                  className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-base"
+                  className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-base"
                   placeholder="e.g., 1995"
                   placeholderTextColor="#9CA19E"
                   keyboardType="numeric"
@@ -315,7 +320,7 @@ export default function OnboardingScreen() {
                     Height (cm)
                   </Text>
                   <TextInput
-                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-base text-center"
+                    className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-base text-center"
                     placeholder="175"
                     placeholderTextColor="#9CA19E"
                     keyboardType="numeric"
@@ -329,7 +334,7 @@ export default function OnboardingScreen() {
                     Weight (kg)
                   </Text>
                   <TextInput
-                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-base text-center"
+                    className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-base text-center"
                     placeholder="75"
                     placeholderTextColor="#9CA19E"
                     keyboardType="numeric"
@@ -376,14 +381,14 @@ export default function OnboardingScreen() {
                       <TouchableOpacity
                         key={level}
                         onPress={() => setActivity(level)}
-                        className={`flex-row justify-between items-center p-3.5 border rounded-2xl bg-white ${
-                          activity === level ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                        className={`flex-row justify-between items-center p-3.5 border rounded-2xl bg-bg-card ${
+                          activity === level ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
                         }`}
                       >
                         <Text className={`text-xs font-inter-medium ${activity === level ? 'text-text-primary font-inter-semibold' : 'text-text-muted'}`}>
                           {titles[level]}
                         </Text>
-                        {activity === level && <Ionicons name="checkmark" size={16} color="#4C6E58" />}
+                        {activity === level && <Ionicons name="checkmark" size={16} color={isDark ? '#5C856C' : '#4C6E58'} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -406,14 +411,14 @@ export default function OnboardingScreen() {
                       <TouchableOpacity
                         key={g}
                         onPress={() => setGoal(g)}
-                        className={`flex-row justify-between items-center p-3.5 border rounded-2xl bg-white ${
-                          goal === g ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                        className={`flex-row justify-between items-center p-3.5 border rounded-2xl bg-bg-card ${
+                          goal === g ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
                         }`}
                       >
                         <Text className={`text-xs font-inter-medium ${goal === g ? 'text-text-primary font-inter-semibold' : 'text-text-muted'}`}>
                           {titles[g]}
                         </Text>
-                        {goal === g && <Ionicons name="checkmark" size={16} color="#4C6E58" />}
+                        {goal === g && <Ionicons name="checkmark" size={16} color={isDark ? '#5C856C' : '#4C6E58'} />}
                       </TouchableOpacity>
                     );
                   })}
@@ -457,8 +462,8 @@ export default function OnboardingScreen() {
                       key={diet.id}
                       onPress={() => setDietType(diet.id as any)}
                       style={{ width: '48%' }}
-                      className={`p-3.5 border rounded-2xl bg-white items-center justify-center ${
-                        dietType === diet.id ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                      className={`p-3.5 border rounded-2xl bg-bg-card items-center justify-center ${
+                        dietType === diet.id ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
                       }`}
                     >
                       <Text className={`text-xs text-center font-inter-medium ${dietType === diet.id ? 'text-text-primary font-inter-semibold' : 'text-text-muted'}`}>
@@ -486,14 +491,14 @@ export default function OnboardingScreen() {
                       <TouchableOpacity
                         key={excl.id}
                         onPress={() => toggleExclusion(excl.id)}
-                        className={`px-4 py-2.5 border rounded-full bg-white flex-row items-center gap-1.5 ${
-                          isSelected ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                        className={`px-4 py-2.5 border rounded-full bg-bg-card flex-row items-center gap-1.5 ${
+                          isSelected ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
                         }`}
                       >
                         <Ionicons
                           name={isSelected ? "checkmark-circle" : "add-circle-outline"}
                           size={14}
-                          color={isSelected ? "#4C6E58" : "#626A66"}
+                          color={isSelected ? (isDark ? "#5C856C" : "#4C6E58") : (isDark ? "#8A9690" : "#626A66")}
                         />
                         <Text className={`text-xs font-inter-medium ${isSelected ? 'text-text-primary font-inter-semibold' : 'text-text-muted'}`}>
                           {excl.label}
@@ -524,7 +529,7 @@ export default function OnboardingScreen() {
               </Text>
 
               {/* Loader visual */}
-              <View className="w-full bg-white rounded-3xl border border-border-muted p-6 items-center shadow-sm">
+              <View className="w-full bg-bg-card rounded-3xl border border-border-muted p-6 items-center shadow-sm">
                 <Animated.View
                   style={{
                     transform: [{ rotate: spin }],
@@ -538,7 +543,7 @@ export default function OnboardingScreen() {
                   <Ionicons
                     name="refresh-outline"
                     size={48}
-                    color="#4C6E58"
+                    color={isDark ? '#5C856C' : '#4C6E58'}
                     style={{
                       width: 48,
                       height: 48,
@@ -554,7 +559,7 @@ export default function OnboardingScreen() {
                 </Text>
 
                 {/* Horizontal Progress Bar */}
-                <View className="w-full h-2 bg-[#EAECEB] rounded-full overflow-hidden mb-4">
+                <View className="w-full h-2 bg-border-muted rounded-full overflow-hidden mb-4">
                   <View
                     className="h-full bg-accent-sage rounded-full"
                     style={{ width: `${loadingProgress * 100}%` }}

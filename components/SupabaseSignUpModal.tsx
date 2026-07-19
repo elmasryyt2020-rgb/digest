@@ -13,6 +13,7 @@ import {
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { PresstoButton } from './PresstoButton';
+import { useColorScheme } from 'nativewind';
 
 type ModalMode = 'signin' | 'signup' | 'verify' | 'forgot' | 'reset';
 
@@ -148,6 +149,8 @@ export function SupabaseSignUpModal() {
 
   const language = useDiaryStore((state) => state.profile?.language) || 'ar';
   const isRtl = language === 'ar';
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   return (
     <Modal
@@ -167,18 +170,18 @@ export function SupabaseSignUpModal() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardAvoid}
         >
-          <View style={styles.sheet}>
-            <View style={styles.handle} />
+          <View style={[styles.sheet, { backgroundColor: isDark ? '#161B18' : '#F8F9F8', borderColor: isDark ? '#242C28' : '#EAECEB' }]}>
+            <View style={[styles.handle, { backgroundColor: isDark ? '#242C28' : '#EAECEB' }]} />
 
             {/* Title & Subtitle based on mode */}
-            <Text style={styles.title}>
+            <Text style={[styles.title, { color: isDark ? '#ECF1EE' : '#1A1E1C' }]}>
               {mode === 'signup' && (isRtl ? 'أنشئ حسابك المجاني' : 'Create Your Free Account')}
               {mode === 'signin' && (isRtl ? 'تسجيل الدخول' : 'Sign In')}
               {mode === 'verify' && (isRtl ? 'تأكيد الحساب' : 'Verify Email')}
               {mode === 'forgot' && (isRtl ? 'نسيت كلمة المرور' : 'Forgot Password')}
               {mode === 'reset' && (isRtl ? 'تعيين كلمة المرور الجديدة' : 'Reset Password')}
             </Text>
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: isDark ? '#8A9690' : '#626A66' }]}>
               {mode === 'signup' && (isRtl ? 'احفظ سجلاتك الصحية اليومية سحابياً ومزامنتها عبر جميع أجهزتك.' : 'Save your daily health history to the cloud and sync it across all your devices.')}
               {mode === 'signin' && (isRtl ? 'مرحبًا بك مجددًا! يرجى تسجيل الدخول لمتابعة تقدمك.' : 'Welcome back! Please sign in to resume your progress.')}
               {mode === 'verify' && (isRtl ? 'يرجى إدخال الرمز المكون من 6 أرقام المرسل إلى بريدك الإلكتروني.' : 'Please enter the 6-digit code sent to your email address.')}
@@ -206,11 +209,11 @@ export function SupabaseSignUpModal() {
                 <>
                   <View style={styles.row}>
                     <View style={styles.col}>
-                      <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left' }]}>
+                      <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}>
                         {isRtl ? 'الاسم الأول' : 'First Name'}
                       </Text>
                       <TextInput
-                        style={[styles.input, { textAlign: isRtl ? 'right' : 'left' }]}
+                        style={[styles.input, { textAlign: isRtl ? 'right' : 'left', backgroundColor: isDark ? '#101412' : '#FFFFFF', borderColor: isDark ? '#242C28' : '#EAECEB', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}
                         placeholder={isRtl ? 'أحمد' : 'John'}
                         placeholderTextColor="#9CA19E"
                         value={firstName}
@@ -219,11 +222,11 @@ export function SupabaseSignUpModal() {
                       />
                     </View>
                     <View style={styles.col}>
-                      <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left' }]}>
+                      <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}>
                         {isRtl ? 'اسم العائلة' : 'Last Name'}
                       </Text>
                       <TextInput
-                        style={[styles.input, { textAlign: isRtl ? 'right' : 'left' }]}
+                        style={[styles.input, { textAlign: isRtl ? 'right' : 'left', backgroundColor: isDark ? '#101412' : '#FFFFFF', borderColor: isDark ? '#242C28' : '#EAECEB', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}
                         placeholder={isRtl ? 'محمد' : 'Doe'}
                         placeholderTextColor="#9CA19E"
                         value={lastName}
@@ -238,11 +241,11 @@ export function SupabaseSignUpModal() {
               {/* Email (for signup, signin, forgot, reset) */}
               {(mode === 'signup' || mode === 'signin' || mode === 'forgot' || mode === 'reset') && (
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left' }]}>
+                  <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}>
                     {isRtl ? 'البريد الإلكتروني' : 'Email Address'}
                   </Text>
                   <TextInput
-                    style={[styles.input, { textAlign: isRtl ? 'right' : 'left' }]}
+                    style={[styles.input, { textAlign: isRtl ? 'right' : 'left', backgroundColor: isDark ? '#101412' : '#FFFFFF', borderColor: isDark ? '#242C28' : '#EAECEB', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}
                     placeholder="name@example.com"
                     placeholderTextColor="#9CA19E"
                     value={email}
@@ -258,11 +261,11 @@ export function SupabaseSignUpModal() {
               {/* Password (for signup, signin, reset) */}
               {(mode === 'signup' || mode === 'signin' || mode === 'reset') && (
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left' }]}>
+                  <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}>
                     {mode === 'reset' ? (isRtl ? 'كلمة المرور الجديدة' : 'New Password') : (isRtl ? 'كلمة المرور' : 'Password')}
                   </Text>
                   <TextInput
-                    style={[styles.input, { textAlign: isRtl ? 'right' : 'left' }]}
+                    style={[styles.input, { textAlign: isRtl ? 'right' : 'left', backgroundColor: isDark ? '#101412' : '#FFFFFF', borderColor: isDark ? '#242C28' : '#EAECEB', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}
                     placeholder="••••••••"
                     placeholderTextColor="#9CA19E"
                     secureTextEntry
@@ -277,11 +280,11 @@ export function SupabaseSignUpModal() {
               {/* Verification Code / OTP (for verify, reset) */}
               {(mode === 'verify' || mode === 'reset') && (
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left' }]}>
+                  <Text style={[styles.label, { textAlign: isRtl ? 'right' : 'left', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}>
                     {isRtl ? 'رمز التحقق (OTP)' : 'Verification Code (OTP)'}
                   </Text>
                   <TextInput
-                    style={[styles.input, { textAlign: 'center', fontSize: 18, letterSpacing: 4 }]}
+                    style={[styles.input, { textAlign: 'center', fontSize: 18, letterSpacing: 4, backgroundColor: isDark ? '#101412' : '#FFFFFF', borderColor: isDark ? '#242C28' : '#EAECEB', color: isDark ? '#ECF1EE' : '#1A1E1C' }]}
                     placeholder="123456"
                     placeholderTextColor="#9CA19E"
                     keyboardType="number-pad"

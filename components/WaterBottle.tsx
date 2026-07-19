@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { useColorScheme } from 'nativewind';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -16,6 +17,8 @@ interface WaterBottleProps {
 }
 
 export function WaterBottle({ actualMl, targetMl }: WaterBottleProps) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const percentage = Math.min(actualMl / (targetMl || 1), 1);
   
   // Shared values for animations
@@ -66,7 +69,10 @@ export function WaterBottle({ actualMl, targetMl }: WaterBottleProps) {
   return (
     <View style={styles.bottleContainer}>
       {/* Bottle Body */}
-      <View style={styles.bottleOuter}>
+      <View style={[styles.bottleOuter, {
+        backgroundColor: isDark ? '#161B18' : '#FFFFFF',
+        borderColor: isDark ? '#242C28' : '#EAECEB',
+      }]}>
         {/* Fluid Container */}
         <Animated.View style={[styles.bottleFluid, fluidStyle]}>
           {/* Wave SVGs placed on top of the fluid */}
@@ -100,9 +106,9 @@ export function WaterBottle({ actualMl, targetMl }: WaterBottleProps) {
 
         {/* Level Indicators on side */}
         <View style={styles.indicators}>
-          <View style={styles.indicatorLine}><Text style={styles.indicatorText}>75%</Text></View>
-          <View style={styles.indicatorLine}><Text style={styles.indicatorText}>50%</Text></View>
-          <View style={styles.indicatorLine}><Text style={styles.indicatorText}>25%</Text></View>
+          <View style={[styles.indicatorLine, { borderBottomColor: isDark ? 'rgba(138, 150, 144, 0.15)' : 'rgba(98, 106, 102, 0.15)' }]}><Text style={[styles.indicatorText, { color: isDark ? '#8A9690' : '#626A66' }]}>75%</Text></View>
+          <View style={[styles.indicatorLine, { borderBottomColor: isDark ? 'rgba(138, 150, 144, 0.15)' : 'rgba(98, 106, 102, 0.15)' }]}><Text style={[styles.indicatorText, { color: isDark ? '#8A9690' : '#626A66' }]}>50%</Text></View>
+          <View style={[styles.indicatorLine, { borderBottomColor: isDark ? 'rgba(138, 150, 144, 0.15)' : 'rgba(98, 106, 102, 0.15)' }]}><Text style={[styles.indicatorText, { color: isDark ? '#8A9690' : '#626A66' }]}>25%</Text></View>
         </View>
       </View>
     </View>

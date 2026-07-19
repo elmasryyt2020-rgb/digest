@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { RecipeType, localRecipes } from '@/data/localRecipes';
 import { useDiaryStore } from '@/store/useDiaryStore';
+import { useColorScheme } from 'nativewind';
 
 interface MealSwapBottomSheetProps {
   visible: boolean;
@@ -144,6 +145,8 @@ export default function MealSwapBottomSheet({
   };
 
   const alternatives = getAlternatives();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   return (
     <Modal
@@ -153,7 +156,7 @@ export default function MealSwapBottomSheet({
       onRequestClose={onClose}
     >
       <Pressable onPress={onClose} className="flex-1 bg-black/40 justify-end">
-        <Pressable className="bg-white rounded-t-3xl p-6 pb-10 border-t border-border-muted max-h-[85%]">
+        <Pressable className="bg-bg-card rounded-t-3xl p-6 pb-10 border-t border-border-muted max-h-[85%]">
           {/* Drag Handle */}
           <View className="w-12 h-1.5 bg-border-muted rounded-full self-center mb-5" />
 
@@ -163,7 +166,7 @@ export default function MealSwapBottomSheet({
               Swap {mealCategory}
             </Text>
             <TouchableOpacity onPress={onClose} className="p-1">
-              <Ionicons name="close-circle" size={24} color="#626A66" />
+              <Ionicons name="close-circle" size={24} color={isDark ? '#8A9690' : '#626A66'} />
             </TouchableOpacity>
           </View>
 
@@ -171,12 +174,12 @@ export default function MealSwapBottomSheet({
           {ingredientToExclude ? (
             <TouchableOpacity
               onPress={handleToggleExclude}
-              className="flex-row items-center bg-[#F3F6F3] border border-border-muted rounded-2xl p-4 mb-6"
+              className="flex-row items-center bg-[#F3F6F3] dark:bg-[#1F2E25] border border-border-muted rounded-2xl p-4 mb-6"
             >
               <Ionicons
                 name={excludeChecked ? 'checkbox' : 'square-outline'}
                 size={20}
-                color="#4C6E58"
+                color={isDark ? '#5C856C' : '#4C6E58'}
               />
               <Text className="font-inter text-xs text-text-primary ml-2.5">
                 Exclude <Text className="font-inter-bold">{ingredientToExclude}</Text> from future plans
@@ -199,7 +202,7 @@ export default function MealSwapBottomSheet({
                     onSelectMeal(recipe);
                     onClose();
                   }}
-                  className="border border-border-muted rounded-2xl p-4 bg-[#F8F9F8] flex-row justify-between items-center"
+                  className="border border-border-muted rounded-2xl p-4 bg-bg-base flex-row justify-between items-center"
                 >
                   <View className="flex-1 pr-3">
                     <Text className="font-outfit-bold text-sm text-text-primary mb-1">

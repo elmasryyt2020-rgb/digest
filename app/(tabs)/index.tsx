@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal, Platform, S
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useColorScheme } from 'nativewind';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { activities, ActivityType } from '@/data/activities';
@@ -12,6 +13,8 @@ import { PresstoButton } from '@/components/PresstoButton';
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   
   // Zustand State
   const profile = useDiaryStore((state) => state.profile);
@@ -125,8 +128,8 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
+      <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
         
         {/* Header Section */}
         <View className={`flex-row justify-between items-center mb-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -145,11 +148,11 @@ export default function DashboardScreen() {
         </View>
 
         {/* Daily vs. Weekly Toggle Segment */}
-        <View className="flex-row bg-[#EAECEB] p-1 rounded-2xl mb-5">
+        <View className="flex-row bg-[#EAECEB] dark:bg-border-muted p-1 rounded-2xl mb-5">
           <PresstoButton 
             onPress={() => setViewMode('daily')}
             className="flex-1 py-2 rounded-xl items-center"
-            style={viewMode === 'daily' ? styles.activeTab : null}
+            style={viewMode === 'daily' ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
           >
             <Text className={`text-xs font-outfit-medium ${viewMode === 'daily' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
               {t.daily}
@@ -158,7 +161,7 @@ export default function DashboardScreen() {
           <PresstoButton 
             onPress={() => setViewMode('weekly')}
             className="flex-1 py-2 rounded-xl items-center"
-            style={viewMode === 'weekly' ? styles.activeTab : null}
+            style={viewMode === 'weekly' ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
           >
             <Text className={`text-xs font-outfit-medium ${viewMode === 'weekly' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
               {t.weekly}
@@ -168,7 +171,7 @@ export default function DashboardScreen() {
 
         {/* Calorie & Macro Target Panel */}
         {viewMode === 'daily' ? (
-          <View className={`bg-white rounded-3xl border border-border-muted p-5 flex-row justify-between items-center mb-5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <View className={`bg-bg-card rounded-3xl border border-border-muted p-5 flex-row justify-between items-center mb-5 ${isRtl ? 'flex-row-reverse' : ''}`}>
             {/* Calorie Progress Ring */}
             <View className="items-center justify-center flex-1">
               <ProgressRing 
@@ -198,7 +201,7 @@ export default function DashboardScreen() {
                   <Text className="text-xs font-outfit-semibold text-[#7E9DB0]">{t.protein}</Text>
                   <Text className="text-xs font-inter-bold text-text-primary">{Math.round(eatenProtein)}g / {profile?.target_protein_g || 120}g</Text>
                 </View>
-                <View className="h-1.5 bg-[#F0F2F0] rounded-full mt-1 overflow-hidden">
+                <View className="h-1.5 bg-[#F0F2F0] dark:bg-border-muted rounded-full mt-1 overflow-hidden">
                   <View 
                     className="h-full rounded-full bg-[#7E9DB0]" 
                     style={{ 
@@ -214,7 +217,7 @@ export default function DashboardScreen() {
                   <Text className="text-xs font-outfit-semibold text-[#D3B177]">{t.carbs}</Text>
                   <Text className="text-xs font-inter-bold text-text-primary">{Math.round(eatenCarbs)}g / {profile?.target_carbs_g || 200}g</Text>
                 </View>
-                <View className="h-1.5 bg-[#F0F2F0] rounded-full mt-1 overflow-hidden">
+                <View className="h-1.5 bg-[#F0F2F0] dark:bg-border-muted rounded-full mt-1 overflow-hidden">
                   <View 
                     className="h-full rounded-full bg-[#D3B177]" 
                     style={{ 
@@ -230,7 +233,7 @@ export default function DashboardScreen() {
                   <Text className="text-xs font-outfit-semibold text-[#9CA19E]">{t.fats}</Text>
                   <Text className="text-xs font-inter-bold text-text-primary">{Math.round(eatenFat)}g / {profile?.target_fat_g || 65}g</Text>
                 </View>
-                <View className="h-1.5 bg-[#F0F2F0] rounded-full mt-1 overflow-hidden">
+                <View className="h-1.5 bg-[#F0F2F0] dark:bg-border-muted rounded-full mt-1 overflow-hidden">
                   <View 
                     className="h-full rounded-full bg-[#9CA19E]" 
                     style={{ 
@@ -243,13 +246,13 @@ export default function DashboardScreen() {
           </View>
         ) : (
           /* Weekly Summary View */
-          <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5">
+          <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5">
             <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>
               {t.weeklyAverages}
             </Text>
             
             {/* Weekly Calorie Average */}
-            <View className={`flex-row items-center py-3 border-b border-[#F0F2F0] ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <View className={`flex-row items-center py-3 border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Ionicons name="flame-outline" size={20} color="#E58C73" />
               <View className={`flex-1 mx-3 ${isRtl ? 'items-end' : 'items-start'}`}>
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.calories}</Text>
@@ -258,7 +261,7 @@ export default function DashboardScreen() {
             </View>
 
             {/* Weekly Water Average */}
-            <View className={`flex-row items-center py-3 border-b border-[#F0F2F0] ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <View className={`flex-row items-center py-3 border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Ionicons name="water-outline" size={20} color="#7E9DB0" />
               <View className={`flex-1 mx-3 ${isRtl ? 'items-end' : 'items-start'}`}>
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.waterIntake}</Text>
@@ -268,7 +271,7 @@ export default function DashboardScreen() {
 
             {/* Weekly Workouts Average */}
             <View className={`flex-row items-center py-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <Ionicons name="fitness-outline" size={20} color="#4C6E58" />
+              <Ionicons name="fitness-outline" size={20} color={isDark ? '#5C856C' : '#4C6E58'} />
               <View className={`flex-1 mx-3 ${isRtl ? 'items-end' : 'items-start'}`}>
                 <Text className="text-xs font-outfit-semibold text-text-primary">{t.workouts}</Text>
                 <Text className="text-[11px] font-inter-medium text-text-muted mt-0.5">{weeklyAvgBurned} kcal / {isRtl ? 'يومي' : 'day'}</Text>
@@ -286,7 +289,7 @@ export default function DashboardScreen() {
             <Text className="text-xs font-outfit-bold text-accent-sage">
               {t.detailLink}
             </Text>
-            <Ionicons name={isRtl ? 'chevron-back' : 'chevron-forward'} size={16} color="#4C6E58" />
+            <Ionicons name={isRtl ? 'chevron-back' : 'chevron-forward'} size={16} color={isDark ? '#5C856C' : '#4C6E58'} />
           </View>
         </PresstoButton>
 
@@ -297,7 +300,7 @@ export default function DashboardScreen() {
             const totalCalories = logs.reduce((sum, log) => sum + log.calories, 0);
 
             return (
-              <View key={mealType} className="w-[48%] bg-white rounded-3xl border border-border-muted p-4 h-[145] mb-4 justify-between">
+              <View key={mealType} className="w-[48%] bg-bg-card rounded-3xl border border-border-muted p-4 h-[145] mb-4 justify-between">
                 <View className={`flex-row justify-between items-center mb-1.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <Text className="font-outfit-bold text-text-primary text-[13px]">
                     {t[mealType]}
@@ -323,7 +326,7 @@ export default function DashboardScreen() {
                       className="mt-auto pt-1"
                       style={{ alignSelf: isRtl ? 'flex-start' : 'flex-end' }}
                     >
-                      <Ionicons name="add-circle" size={20} color="#4C6E58" />
+                      <Ionicons name="add-circle" size={20} color={isDark ? '#5C856C' : '#4C6E58'} />
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -347,7 +350,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Water Intake Dashboard Panel */}
-        <View className={`bg-white rounded-3xl border border-border-muted p-5 flex-row justify-between items-center mt-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <View className={`bg-bg-card rounded-3xl border border-border-muted p-5 flex-row justify-between items-center mt-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'}`}>
             <Text className="font-outfit-bold text-text-primary text-base mb-1">
               {t.waterIntake}
@@ -380,7 +383,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Active Workouts Panel */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mt-5">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mt-5">
           <View className={`flex-row justify-between items-center mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <View className={isRtl ? 'items-end' : 'items-start'}>
               <Text className="font-outfit-bold text-text-primary text-base">
@@ -403,7 +406,7 @@ export default function DashboardScreen() {
           {todayWorkoutLogs.length > 0 ? (
             <View>
               {todayWorkoutLogs.map((log) => (
-                <View key={log.id} className={`flex-row justify-between items-center border-b border-[#F0F2F0] py-2.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <View key={log.id} className={`flex-row justify-between items-center border-b border-border-muted py-2.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'}`}>
                     <Text className="text-xs font-outfit-bold text-text-primary">
                       {isRtl ? log.activity_name_ar : log.activity_name_en}
@@ -478,7 +481,7 @@ export default function DashboardScreen() {
             <View className="mb-5">
               <Text className={`text-xs font-outfit-semibold text-text-primary mb-1.5 ${isRtl ? 'text-right' : 'text-left'}`}>{t.workoutDuration}</Text>
               <TextInput
-                className={`bg-white border border-border-muted rounded-xl px-3 py-2 font-inter-regular text-sm text-text-primary ${
+                className={`bg-bg-card border border-border-muted rounded-xl px-3 py-2 font-inter-regular text-sm text-text-primary ${
                   isRtl ? 'text-right' : 'text-left'
                 }`}
                 style={{ paddingVertical: Platform.OS === 'ios' ? 12 : 8 }}
@@ -492,7 +495,7 @@ export default function DashboardScreen() {
             <View className={`flex-row justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
               <TouchableOpacity
                 onPress={() => setIsWorkoutModalOpen(false)}
-                className="flex-1 py-3 bg-[#EAECEB] rounded-xl items-center justify-center mr-3"
+                className="flex-1 py-3 bg-[#EAECEB] dark:bg-border-muted rounded-xl items-center justify-center mr-3"
                 style={{ marginRight: isRtl ? 0 : 12, marginLeft: isRtl ? 12 : 0 }}
               >
                 <Text className="text-text-muted text-xs font-outfit-bold">{t.cancel}</Text>

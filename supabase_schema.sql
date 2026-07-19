@@ -174,7 +174,21 @@ ON CONFLICT (id) DO NOTHING;
 
 -- RLS Policy: Users can upload, read, and delete their own files in reports/
 CREATE POLICY "Users can manage their own reports" ON storage.objects
-    FOR ALL 
+    FOR ALL
     TO authenticated
     USING (bucket_id = 'reports' AND auth.uid()::text = (storage.foldername(name))[1])
     WITH CHECK (bucket_id = 'reports' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- 10. Storage Bucket for AI Vision Scans
+-- Private bucket. Each user uploads under a path scoped to their own uid
+-- (e.g. "<user_id>/<uuid>.jpg") and can only access their own files.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('scans', 'scans', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS Policy: Users can upload, read, and delete their own scan images in scans/
+CREATE POLICY "Users can manage their own scans" ON storage.objects
+    FOR ALL
+    TO authenticated
+    USING (bucket_id = 'scans' AND auth.uid()::text = (storage.foldername(name))[1])
+    WITH CHECK (bucket_id = 'scans' AND auth.uid()::text = (storage.foldername(name))[1]);

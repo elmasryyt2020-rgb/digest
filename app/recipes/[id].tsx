@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useColorScheme } from 'nativewind';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -17,6 +18,8 @@ import { localRecipes } from '@/data/localRecipes';
 import { PresstoButton } from '@/components/PresstoButton';
 
 export default function RecipeDetailScreen() {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const { id } = useLocalSearchParams();
 
@@ -40,7 +43,7 @@ export default function RecipeDetailScreen() {
 
   if (!recipe) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }} className="justify-center items-center p-6">
+      <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }} className="justify-center items-center p-6">
         <Ionicons name="alert-circle-outline" size={48} color="#E58C73" />
         <Text className="font-outfit-bold text-lg text-text-primary mt-4">
           {isRtl ? 'الوصفة غير موجودة' : 'Recipe not found'}
@@ -100,14 +103,14 @@ export default function RecipeDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       {/* Header */}
-      <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+      <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
         <TouchableOpacity
           onPress={() => router.back()}
           className={`flex-row items-center py-1.5 px-3 rounded-xl bg-accent-mint ${isRtl ? 'flex-row-reverse' : ''}`}
         >
-          <Ionicons name={isRtl ? 'arrow-forward' : 'arrow-back'} size={18} color="#4C6E58" />
+          <Ionicons name={isRtl ? 'arrow-forward' : 'arrow-back'} size={18} color={isDark ? '#5C856C' : '#4C6E58'} />
           <Text className="font-outfit-bold text-accent-sage text-xs mx-1">
             {t.back}
           </Text>
@@ -134,25 +137,25 @@ export default function RecipeDetailScreen() {
 
           {/* Interactive Macros Bento Grid */}
           <View className={`flex-row justify-between mb-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#FFF2EE]">
+            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#FFF2EE] dark:bg-[#2C1A16]">
               <Text className="text-nutrient-calories font-outfit-bold text-lg">
                 {recipe.total_calories}
               </Text>
               <Text className="text-[10px] font-inter-bold text-text-muted">{t.kcal}</Text>
             </View>
-            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#F3F7FA]">
+            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#F3F7FA] dark:bg-[#15232D]">
               <Text className="text-[#7E9DB0] font-outfit-bold text-lg">
                 {recipe.total_protein_g}g
               </Text>
               <Text className="text-[10px] font-inter-bold text-text-muted">{t.protein}</Text>
             </View>
-            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#FAF6F0]">
+            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#FAF6F0] dark:bg-[#2E2413]">
               <Text className="text-[#D3B177] font-outfit-bold text-lg">
                 {recipe.total_carbs_g}g
               </Text>
               <Text className="text-[10px] font-inter-bold text-text-muted">{t.carbs}</Text>
             </View>
-            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#F5F5F5]">
+            <View className="flex-1 items-center justify-center py-3 rounded-2xl mx-1 border border-border-muted bg-[#F5F5F5] dark:bg-[#222222]">
               <Text className="text-[#9CA19E] font-outfit-bold text-lg">
                 {recipe.total_fat_g}g
               </Text>
@@ -188,8 +191,8 @@ export default function RecipeDetailScreen() {
                 <TouchableOpacity
                   key={idx}
                   onPress={() => handleToggleStep(idx)}
-                  className={`flex-row items-start p-3 rounded-2xl mb-2 bg-white border border-border-muted ${
-                    isCompleted ? 'bg-[#F3F6F3] border-[#C3D9B6]' : ''
+                  className={`flex-row items-start p-3 rounded-2xl mb-2 bg-bg-card border border-border-muted ${
+                    isCompleted ? 'bg-[#F3F6F3] dark:bg-[#1F2E25] border-[#C3D9B6] dark:border-[#243E2C]' : ''
                   } ${isRtl ? 'flex-row-reverse' : ''}`}
                 >
                   <View
@@ -246,13 +249,13 @@ export default function RecipeDetailScreen() {
               </Text>
 
               {/* Meal options */}
-              <View className="my-3 space-y-2">
+              <View className="my-3 gap-y-2">
                 {(['breakfast', 'lunch', 'dinner', 'snacks'] as const).map((cat) => (
                   <TouchableOpacity
                     key={cat}
                     onPress={() => setMealPlanType(cat)}
-                    className={`flex-row justify-between items-center p-3 border border-border-muted rounded-2xl bg-white ${
-                      mealPlanType === cat ? 'bg-[#F3F6F3] border-accent-sage' : ''
+                    className={`flex-row justify-between items-center p-3 border border-border-muted rounded-2xl bg-bg-card ${
+                      mealPlanType === cat ? 'bg-[#F3F6F3] dark:bg-[#1F2E25] border-accent-sage' : ''
                     } ${isRtl ? 'flex-row-reverse' : ''}`}
                   >
                     <Text className={`text-sm font-inter-medium ${mealPlanType === cat ? 'text-text-primary font-inter-bold' : 'text-text-muted'}`}>
@@ -262,7 +265,7 @@ export default function RecipeDetailScreen() {
                       {cat === 'snacks' && (isRtl ? 'وجبات خفيفة' : 'Snacks')}
                     </Text>
                     {mealPlanType === cat && (
-                      <Ionicons name="checkmark" size={18} color="#4C6E58" />
+                      <Ionicons name="checkmark" size={18} color={isDark ? '#5C856C' : '#4C6E58'} />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -272,10 +275,10 @@ export default function RecipeDetailScreen() {
               <View className={`flex-row justify-between mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <TouchableOpacity
                   onPress={() => setShowMealPlanPicker(false)}
-                  className="flex-1 py-3 bg-[#EAECEB] rounded-2xl items-center justify-center mr-3"
+                  className="flex-1 py-3 bg-[#EAECEB] dark:bg-border-muted rounded-2xl items-center justify-center mr-3"
                   style={{ marginRight: isRtl ? 0 : 12, marginLeft: isRtl ? 12 : 0 }}
                 >
-                  <Text className="color-[#626A66] font-outfit-bold text-sm">{t.cancel}</Text>
+                  <Text className="text-text-muted font-outfit-bold text-sm">{t.cancel}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity

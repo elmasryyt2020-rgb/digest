@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle, Text as SvgText } from 'react-native-svg';
+import { useColorScheme } from 'nativewind';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { PresstoButton } from '@/components/PresstoButton';
@@ -13,6 +14,8 @@ import MealSwapBottomSheet from '@/components/MealSwapBottomSheet';
 export default function OnboardingResultsScreen() {
   const router = useRouter();
   const profile = useDiaryStore((state) => state.profile);
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   // Targets are computed in onboarding.tsx and set in Zustand
   const targetCalories = profile?.target_calories || 1850;
@@ -149,7 +152,7 @@ export default function OnboardingResultsScreen() {
   const points = getPoints();
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
         
         {/* Title */}
@@ -160,39 +163,42 @@ export default function OnboardingResultsScreen() {
           Your custom <Text style={{ fontStyle: 'italic' }}>plan</Text>.
         </Text>
         <Text className="font-inter text-sm text-text-muted leading-relaxed mb-6">
-          We have generated your target macros and weight projection based on your profile inputs.
+          Based on your weight goal, activity levels, and biometrics, here is your target nutrition allocation.
         </Text>
 
-        {/* Target Calories Bento Box */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-          <Text className="font-outfit-bold text-xs text-text-primary mb-1">Daily Target Calories</Text>
-          <Text className="font-outfit-bold text-4xl text-nutrient-calories tracking-tight mb-4">{targetCalories} kcal</Text>
-          
-          <Text className="font-outfit-bold text-xs text-text-primary mb-3">Daily Macronutrient Targets</Text>
-          <View className="flex-row justify-between gap-2">
-            
+        {/* Nutritional Summary cards */}
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          {/* Calorie Intake Target */}
+          <Text className="font-outfit-bold text-xs text-text-primary mb-1">Target Calorie Intake</Text>
+          <Text className="font-outfit-bold text-3xl text-accent-sage mb-4">
+            {targetCalories} <Text className="font-inter-medium text-xs text-text-muted uppercase tracking-wider">kcal / day</Text>
+          </Text>
+
+          {/* Macros Target Allocation */}
+          <Text className="font-outfit-bold text-xs text-text-primary mb-2.5">Macro Target Allocation</Text>
+          <View className="flex-row gap-2.5">
             {/* Protein */}
             <View className="flex-1 bg-[#7E9DB0]/10 rounded-2xl p-3 items-center">
-              <Text className="font-outfit-bold text-base text-[#5D7E92]">{targetProtein}g</Text>
-              <Text className="font-inter text-[10px] text-[#5D7E92] font-semibold mt-0.5">Protein</Text>
+              <Text className="font-outfit-bold text-base" style={{ color: isDark ? '#7E9DB0' : '#5D7E92' }}>{targetProtein}g</Text>
+              <Text className="font-inter text-[10px] font-semibold mt-0.5" style={{ color: isDark ? '#7E9DB0' : '#5D7E92' }}>Protein</Text>
             </View>
 
             {/* Carbs */}
             <View className="flex-1 bg-[#D3B177]/10 rounded-2xl p-3 items-center">
-              <Text className="font-outfit-bold text-base text-[#A9894E]">{targetCarbs}g</Text>
-              <Text className="font-inter text-[10px] text-[#A9894E] font-semibold mt-0.5">Carbs</Text>
+              <Text className="font-outfit-bold text-base" style={{ color: isDark ? '#D3B177' : '#A9894E' }}>{targetCarbs}g</Text>
+              <Text className="font-inter text-[10px] font-semibold mt-0.5" style={{ color: isDark ? '#D3B177' : '#A9894E' }}>Carbs</Text>
             </View>
 
-            {/* Fat */}
+            {/* Fats */}
             <View className="flex-1 bg-[#9CA19E]/10 rounded-2xl p-3 items-center">
-              <Text className="font-outfit-bold text-base text-[#767B78]">{targetFat}g</Text>
-              <Text className="font-inter text-[10px] text-[#767B78] font-semibold mt-0.5">Fats</Text>
+              <Text className="font-outfit-bold text-base" style={{ color: isDark ? '#9CA19E' : '#767B78' }}>{targetFat}g</Text>
+              <Text className="font-inter text-[10px] font-semibold mt-0.5" style={{ color: isDark ? '#9CA19E' : '#767B78' }}>Fats</Text>
             </View>
           </View>
         </View>
 
         {/* SVG Weight projection graph */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
           <Text className="font-outfit-bold text-xs text-text-primary mb-1">Predicted Weight Trajectory</Text>
           <Text className="font-inter text-[10px] text-text-muted mb-4">4-week projection curve based on metabolic targets</Text>
           
@@ -201,7 +207,7 @@ export default function OnboardingResultsScreen() {
               <Path
                 d={getChartPath()}
                 fill="none"
-                stroke="#4C6E58"
+                stroke={isDark ? '#5C856C' : '#4C6E58'}
                 strokeWidth={3}
               />
               {points.map((p, idx) => (
@@ -210,8 +216,8 @@ export default function OnboardingResultsScreen() {
                     cx={p.x}
                     cy={p.y}
                     r={5}
-                    fill="#F8F9F8"
-                    stroke="#4C6E58"
+                    fill={isDark ? '#101412' : '#F8F9F8'}
+                    stroke={isDark ? '#5C856C' : '#4C6E58'}
                     strokeWidth={2}
                   />
                   <SvgText
@@ -219,7 +225,7 @@ export default function OnboardingResultsScreen() {
                     y={p.y > 60 ? p.y - 12 : p.y + 18}
                     fontSize="9"
                     fontFamily="Inter-Medium"
-                    fill="#626A66"
+                    fill={isDark ? '#8A9690' : '#626A66'}
                     textAnchor="middle"
                   >
                     {p.label}
@@ -238,7 +244,7 @@ export default function OnboardingResultsScreen() {
           if (!recipe) return null;
 
           return (
-            <View key={category} className="bg-white rounded-3xl border border-border-muted p-5 mb-4 shadow-sm relative overflow-hidden">
+            <View key={category} className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-4 shadow-sm relative overflow-hidden">
               {/* Card Header */}
               <View className="flex-row justify-between items-center mb-3">
                 <View className="bg-accent-mint px-2.5 py-1 rounded-full">
@@ -248,7 +254,7 @@ export default function OnboardingResultsScreen() {
                   onPress={() => handleOpenSwap(category as any)}
                   className="flex-row items-center bg-bg-base border border-border-muted px-2.5 py-1 rounded-full gap-1"
                 >
-                  <Ionicons name="refresh-outline" size={12} color="#4C6E58" />
+                  <Ionicons name="refresh-outline" size={12} color={isDark ? '#5C856C' : '#4C6E58'} />
                   <Text className="text-[10px] font-outfit-bold text-accent-sage">Swap</Text>
                 </TouchableOpacity>
               </View>
@@ -272,8 +278,11 @@ export default function OnboardingResultsScreen() {
                 </View>
 
                 {/* Frosted Glassmorphic Lock Overlay */}
-                <View style={styles.frostedOverlay} className="absolute inset-0 items-center justify-center p-3 border border-white/40">
-                  <Ionicons name="lock-closed" size={16} color="#4C6E58" className="mb-1" />
+                <View 
+                  style={[styles.frostedOverlay, { backgroundColor: isDark ? 'rgba(22, 27, 24, 0.9)' : 'rgba(248, 249, 248, 0.9)' }]} 
+                  className="absolute inset-0 items-center justify-center p-3 border border-white/40"
+                >
+                  <Ionicons name="lock-closed" size={16} color={isDark ? '#5C856C' : '#4C6E58'} className="mb-1" />
                   <Text className="font-outfit-bold text-xs text-text-primary text-center">Recipe details locked</Text>
                   <Text className="font-inter text-[9px] text-text-muted text-center mt-0.5">Create your account to reveal instructions</Text>
                 </View>
@@ -283,9 +292,9 @@ export default function OnboardingResultsScreen() {
         })}
 
         {/* Claim Plan Action Card */}
-        <View className="bg-white border border-border-muted rounded-3xl p-5 mt-4 shadow-lg">
+        <View className="bg-bg-card border border-border-muted rounded-3xl p-5 mt-4 shadow-lg">
           <View className="flex-row items-center gap-1.5 mb-2">
-            <Ionicons name="lock-closed" size={16} color="#626A66" />
+            <Ionicons name="lock-closed" size={16} color={isDark ? '#8A9690' : '#626A66'} />
             <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider">
               More details waiting
             </Text>

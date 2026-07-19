@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from 'nativewind';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -19,6 +20,8 @@ import { PresstoButton } from '@/components/PresstoButton';
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const signUp = useAuthStore((state) => state.signUp);
   const verifyOtp = useAuthStore((state) => state.verifyOtp);
   const isAuthLoading = useAuthStore((state) => state.isLoading);
@@ -82,7 +85,7 @@ export default function SignUpScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
@@ -93,7 +96,7 @@ export default function SignUpScreen() {
         >
           {/* Header */}
           <View className="items-center mb-8">
-            <Ionicons name="heart" size={40} color="#4C6E58" />
+            <Ionicons name="heart" size={40} color={isDark ? '#5C856C' : '#4C6E58'} />
             <Text className="font-outfit-bold text-2xl text-text-primary mt-2">
               {isVerifyingOtp ? 'Verify Your Email' : 'Create Your Account'}
             </Text>
@@ -105,7 +108,7 @@ export default function SignUpScreen() {
           </View>
 
           {error ? (
-            <View className="bg-[#FFF2EE] border border-[#FBD5D5] p-4 rounded-2xl mb-4">
+            <View className="bg-[#FFF2EE] dark:bg-[#2C1A16] border border-[#FBD5D5] dark:border-[#52251D] p-4 rounded-2xl mb-4">
               <Text className="text-xs font-inter-semibold text-nutrient-calories text-center">
                 {error}
               </Text>
@@ -113,7 +116,7 @@ export default function SignUpScreen() {
           ) : null}
 
           {info ? (
-            <View className="bg-accent-mint border border-[#C3D9B6] p-4 rounded-2xl mb-4">
+            <View className="bg-accent-mint border border-[#C3D9B6] dark:border-[#243E2C] p-4 rounded-2xl mb-4">
               <Text className="text-xs font-inter-semibold text-accent-sage text-center">
                 {info}
               </Text>
@@ -130,7 +133,7 @@ export default function SignUpScreen() {
                       First Name
                     </Text>
                     <TextInput
-                      className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                      className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
                       placeholder="e.g., Jane"
                       placeholderTextColor="#9CA19E"
                       value={firstName}
@@ -143,7 +146,7 @@ export default function SignUpScreen() {
                       Last Name
                     </Text>
                     <TextInput
-                      className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                      className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
                       placeholder="e.g., Doe"
                       placeholderTextColor="#9CA19E"
                       value={lastName}
@@ -158,7 +161,7 @@ export default function SignUpScreen() {
                     Email Address
                   </Text>
                   <TextInput
-                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                    className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
                     placeholder="name@example.com"
                     placeholderTextColor="#9CA19E"
                     keyboardType="email-address"
@@ -174,7 +177,7 @@ export default function SignUpScreen() {
                     Password
                   </Text>
                   <TextInput
-                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
+                    className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-sm"
                     placeholder="••••••••"
                     placeholderTextColor="#9CA19E"
                     secureTextEntry
@@ -220,7 +223,7 @@ export default function SignUpScreen() {
                     Verification Code (OTP)
                   </Text>
                   <TextInput
-                    className="bg-white border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-lg text-center"
+                    className="bg-bg-card border border-border-muted rounded-2xl p-4 font-inter text-text-primary text-lg text-center"
                     placeholder="123456"
                     placeholderTextColor="#9CA19E"
                     keyboardType="number-pad"
@@ -236,7 +239,7 @@ export default function SignUpScreen() {
               <PresstoButton
                 disabled={isAuthLoading}
                 onPress={handleVerifyOtp}
-                className="bg-[#4C6E58] rounded-2xl py-4 items-center justify-center mb-6"
+                className="bg-accent-sage rounded-2xl py-4 items-center justify-center mb-6"
               >
                 {isAuthLoading ? (
                   <ActivityIndicator color="#FFFFFF" size="small" />

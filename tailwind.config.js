@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     "./app/**/*.{js,jsx,ts,tsx}",
     "./components/**/*.{js,jsx,ts,tsx}"
@@ -8,13 +9,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'bg-base': '#F8F9F8',
-        'bg-card': '#FFFFFF',
-        'border-muted': '#EAECEB',
-        'text-primary': '#1A1E1C',
-        'text-muted': '#626A66',
-        'accent-sage': '#4C6E58',
-        'accent-mint': '#E2ECD7',
+        'bg-base': 'var(--bg-base)',
+        'bg-card': 'var(--bg-card)',
+        'border-muted': 'var(--border-muted)',
+        'text-primary': 'var(--text-primary)',
+        'text-muted': 'var(--text-muted)',
+        'accent-sage': 'var(--accent-sage)',
+        'accent-mint': 'var(--accent-mint)',
         'nutrient-calories': '#E58C73',
         'nutrient-protein': '#7E9DB0',
         'nutrient-carbs': '#D3B177',
@@ -34,3 +35,4 @@ module.exports = {
   },
   plugins: [],
 }
+

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useColorScheme } from 'nativewind';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
@@ -25,6 +26,9 @@ export default function WelcomeScreen() {
   const setProfile = useDiaryStore((state) => state.setProfile);
   const initializeDefaultProfile = useDiaryStore((state) => state.initializeDefaultProfile);
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
+
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const translateY = useSharedValue(0);
 
@@ -84,17 +88,17 @@ export default function WelcomeScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#101412' : '#F8F9F8' }]}>
       {/* Ambient glassmorphic glowing spots */}
-      <View style={styles.glowSage} />
-      <View style={styles.glowPeach} />
+      <View style={[styles.glowSage, { backgroundColor: isDark ? '#1F2E25' : '#E2ECD7' }]} />
+      <View style={[styles.glowPeach, { backgroundColor: isDark ? '#E58C73' : '#E58C73', opacity: isDark ? 0.05 : 0.1 }]} />
 
       <View className="flex-1 px-8 justify-between pb-10 pt-4 relative z-10">
         {/* Header */}
         <View style={[styles.header, isRtl && styles.rtlRow]}>
           {/* Logo */}
           <View style={[styles.logoContainer, isRtl && styles.rtlRow]}>
-            <Ionicons name="heart" size={28} color="#4C6E58" />
+            <Ionicons name="heart" size={28} color={isDark ? '#5C856C' : '#4C6E58'} />
             <Text className="font-outfit-bold text-2xl text-text-primary ml-2 mr-2">digest</Text>
           </View>
 

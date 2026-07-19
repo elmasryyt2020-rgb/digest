@@ -7,6 +7,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
+import { useColorScheme } from 'nativewind';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -23,8 +24,12 @@ export function ProgressRing({
   size = 100,
   strokeWidth = 10,
   color = '#E58C73', // Default Coral
-  backgroundColor = '#F0F2F0',
+  backgroundColor,
 }: ProgressRingProps) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const finalBgColor = backgroundColor || (isDark ? '#242C28' : '#F0F2F0');
+
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   
@@ -55,7 +60,7 @@ export function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={backgroundColor}
+          stroke={finalBgColor}
           strokeWidth={strokeWidth}
           fill="transparent"
         />

@@ -22,6 +22,7 @@ interface AuthState {
   verifyResetOtp: (email: string, token: string) => Promise<boolean>;
   updatePassword: (password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -204,6 +205,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     set({ isLoading: true });
     try {
+      await supabase.auth.signOut();
+      set({ user: null, isSignedIn: false, isLoading: false });
+      useDiaryStore.getState().resetAll();
+    } catch (err) {
+      set({ isLoading: false });
+      throw err;
+    }
+  },
+
+  deleteAccount: async () => {
+    set({ isLoading: true });
+    try {
+      const { error } = await supabase.functions.invoke('delete-account');
+      if (error) throw error;
       await supabase.auth.signOut();
       set({ user: null, isSignedIn: false, isLoading: false });
       useDiaryStore.getState().resetAll();

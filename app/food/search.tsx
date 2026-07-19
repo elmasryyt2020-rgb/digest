@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, {
@@ -22,6 +23,9 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system/legacy';
 import { StatusBar } from 'expo-status-bar';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
@@ -153,6 +157,8 @@ const mapUsdaNutrients = (nutrients: any[]) => {
 };
 
 export default function FoodSearchScreen() {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const router = useRouter();
   const params = useLocalSearchParams();
   const mealType = (params.meal_type as any) || 'breakfast';
@@ -187,9 +193,11 @@ export default function FoodSearchScreen() {
   // View Modes: 'search' | 'barcode' | 'camera'
   const [mode, setMode] = useState<'search' | 'barcode' | 'camera'>('search');
   const [barcodeState, setBarcodeState] = useState<'scanning' | 'detected'>('scanning');
-  const [cameraState, setCameraState] = useState<'idle' | 'scanning' | 'detected'>('idle');
+  const [cameraState, setCameraState] = useState<'idle' | 'scanning' | 'detected' | 'error'>('idle');
   const [cameraImage, setCameraImage] = useState<string | null>(null);
   const [detectedItems, setDetectedItems] = useState<DetectedItemType[]>([]);
+  const cameraRef = useRef<CameraView>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   
   // Reanimated values for barcode scanner red line
   const laserPosition = useSharedValue(0);
@@ -233,6 +241,11 @@ export default function FoodSearchScreen() {
     cameraTitle: isRtl ? 'الماسح الضوئي الذكي' : 'AI Vision Scanner',
     cameraScanning: isRtl ? 'جارٍ تحليل الوجبة بالذكاء الاصطناعي...' : 'Analyzing meal using AI...',
     cameraSuccess: isRtl ? 'تم التعرف على المكونات!' : 'Meal components identified!',
+    cameraSnap: isRtl ? 'التقاط صورة الوجبة' : 'Snap Meal Photo',
+    cameraGallery: isRtl ? 'اختيار من المعرض' : 'Pick from Gallery',
+    cameraRetake: isRtl ? 'إعادة التقاط' : 'Retake',
+    cameraEmpty: isRtl ? 'لم يتم التعرف على أي مكونات. حاول مرة أخرى بصورة أوضح.' : 'No components detected. Try again with a clearer photo.',
+    cameraError: isRtl ? 'حدث خطأ أثناء المسح. حاول مرة أخرى.' : 'Something went wrong while scanning. Please try again.',
     scanBoxMsg: isRtl ? 'ضع الباركود داخل المربع للمسح' : 'Place barcode inside the square to scan',
     recentHeader: isRtl ? 'الأطعمة المسجلة مؤخراً' : 'Recently Logged Foods',
     dbFoodsHeader: isRtl ? 'أطعمة شائعة من قاعدة البيانات' : 'Common Database Foods',
@@ -631,29 +644,129 @@ export default function FoodSearchScreen() {
     }
   };
 
-  // Trigger AI Camera simulation
+  // Trigger AI Camera scan
   const triggerCameraScan = () => {
     setMode('camera');
     setCameraState('idle');
     setDetectedItems([]);
+    setCameraImage(null);
+    setCameraError(null);
+    setSelectedFood(null);
+    try {
+      requestPermission();
+    } catch (e) {
+      console.warn('Failed to request camera permission:', e);
+    }
   };
 
-  const handleSnapPhoto = () => {
+  // Reset back to the idle capture state so the user can take another photo.
+  const handleRetake = () => {
+    setCameraState('idle');
+    setCameraImage(null);
+    setDetectedItems([]);
+    setSelectedFood(null);
+    setCameraError(null);
+  };
+
+  // Core pipeline: take a local image uri, compress it, upload to the
+  // `scans` Storage bucket, invoke the `scan-image` edge function, and
+  // render the detected items as an interactive overlay.
+  const runScan = useCallback(async (localUri: string) => {
     setCameraState('scanning');
-    
-    // Simulate food image scanning with coordinate overlay outputs after 2 seconds
-    setTimeout(() => {
+    setCameraError(null);
+    try {
+      // 1. Compress: max 1024px wide, 85% JPEG quality (per ai_vision.md §1).
+      const manipulated = await ImageManipulator.manipulateAsync(
+        localUri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      const compressedUri = manipulated.uri;
+
+      // 2. Resolve the current user id (path is scoped to the caller's uid).
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('You must be signed in to scan meals.');
+      }
+      const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`;
+      const uploadPath = `${user.id}/${fileName}`;
+
+      // 3. Upload to the private `scans` bucket (RLS enforces per-user paths).
+      const base64 = await FileSystem.readAsStringAsync(compressedUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const binaryStr = atob(base64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const { error: uploadError } = await supabase.storage
+        .from('scans')
+        .upload(uploadPath, bytes, { contentType: 'image/jpeg', upsert: false });
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      // 4. Invoke the scan-image edge function (auto-injects the bearer token).
+      const { data, error } = await supabase.functions.invoke('scan-image', {
+        body: { image_path: uploadPath },
+      });
+      if (error) {
+        throw new Error(error.message ?? 'Edge function failed');
+      }
+      const detected: DetectedItemType[] = Array.isArray(data?.detected_items)
+        ? (data.detected_items as DetectedItemType[])
+        : [];
+
+      // 5. Render the compressed image as the overlay backdrop.
+      setCameraImage(compressedUri);
+      setDetectedItems(detected);
       setCameraState('detected');
-      setCameraImage('https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80');
-      
-      const items: DetectedItemType[] = [
-        { id: 'usda:egg_boiled', name_en: 'Boiled Egg', name_ar: 'بيض مسلوق', amount_g: 100, anchor_point: [25, 30], calories_per_100g: 155, protein_per_100g: 13, carbs_per_100g: 1.1, fat_per_100g: 11, source: 'usda' },
-        { id: 'usda:shakshuka', name_en: 'Eggs Shakshuka', name_ar: 'شكشكوتنا اللذيذة', amount_g: 200, anchor_point: [60, 55], calories_per_100g: 145, protein_per_100g: 9.5, carbs_per_100g: 5, fat_per_100g: 10, source: 'usda' },
-      ];
-      setDetectedItems(items);
-      setSelectedFood(items[0]); // Default select the first item
-      setWeight(items[0].amount_g);
-    }, 2000);
+      if (detected.length > 0) {
+        setSelectedFood(detected[0]);
+        setWeight(detected[0].amount_g);
+      } else {
+        setSelectedFood(null);
+      }
+    } catch (err: any) {
+      console.error('Vision scan failed:', err);
+      setCameraError(err?.message ?? 'Scan failed');
+      setCameraState('error');
+    }
+  }, []);
+
+  // Live capture path: open the device camera and take a photo.
+  const handleSnapPhoto = async () => {
+    try {
+      const photo = await cameraRef.current?.takePictureAsync();
+      if (!photo?.uri) {
+        throw new Error('Camera did not return an image.');
+      }
+      await runScan(photo.uri);
+    } catch (err: any) {
+      console.error('Camera capture failed:', err);
+      setCameraError(err?.message ?? 'Capture failed');
+      setCameraState('error');
+    }
+  };
+
+  // Gallery path: pick an existing image (also goes through compression + scan).
+  const handlePickFromGallery = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+      await runScan(result.assets[0].uri);
+    } catch (err: any) {
+      console.error('Gallery pick failed:', err);
+      setCameraError(err?.message ?? 'Pick failed');
+      setCameraState('error');
+    }
   };
 
   const handleSelectOverlayTag = (item: DetectedItemType) => {
@@ -697,25 +810,25 @@ export default function FoodSearchScreen() {
     ];
     
     return (
-      <View className="bg-white rounded-3xl border border-border-muted p-4 mt-3 shadow-md">
+      <View className="bg-bg-card rounded-3xl border border-border-muted p-4 mt-3 shadow-md">
         <View className={`flex-row justify-between items-center mb-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <Text className="text-base font-outfit-bold text-text-primary flex-1">
             {isRtl ? selectedFood.name_ar : selectedFood.name_en}
           </Text>
           {translating && (
-            <ActivityIndicator size="small" color="#4C6E58" className="mx-2" />
+            <ActivityIndicator size="small" color={isDark ? '#5C856C' : '#4C6E58'} className="mx-2" />
           )}
           <TouchableOpacity 
             onPress={() => setSelectedFood(null)}
             className="p-1"
           >
-            <Ionicons name="close" size={20} color="#626A66" />
+            <Ionicons name="close" size={20} color={isDark ? '#8A9690' : '#626A66'} />
           </TouchableOpacity>
         </View>
         
         {/* Nutrients Bento grid */}
         <View className={`flex-row justify-between items-center my-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <View className="flex-1 items-center bg-[#F8F9F8] py-2 rounded-xl mx-1 border border-border-muted">
+          <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
             <Text className="text-nutrient-calories font-outfit-bold text-base">
               {Math.round(selectedFood.calories_per_100g * factor)}
             </Text>
@@ -723,7 +836,7 @@ export default function FoodSearchScreen() {
               {t.kcal}
             </Text>
           </View>
-          <View className="flex-1 items-center bg-[#F8F9F8] py-2 rounded-xl mx-1 border border-border-muted">
+          <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
             <Text className="text-[#7E9DB0] font-outfit-bold text-base">
               {Math.round(selectedFood.protein_per_100g * factor * 10) / 10}g
             </Text>
@@ -731,7 +844,7 @@ export default function FoodSearchScreen() {
               {t.protein}
             </Text>
           </View>
-          <View className="flex-1 items-center bg-[#F8F9F8] py-2 rounded-xl mx-1 border border-border-muted">
+          <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
             <Text className="text-[#D3B177] font-outfit-bold text-base">
               {Math.round(selectedFood.carbs_per_100g * factor * 10) / 10}g
             </Text>
@@ -739,7 +852,7 @@ export default function FoodSearchScreen() {
               {t.carbs}
             </Text>
           </View>
-          <View className="flex-1 items-center bg-[#F8F9F8] py-2 rounded-xl mx-1 border border-border-muted">
+          <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
             <Text className="text-[#9CA19E] font-outfit-bold text-base">
               {Math.round(selectedFood.fat_per_100g * factor * 10) / 10}g
             </Text>
@@ -752,7 +865,7 @@ export default function FoodSearchScreen() {
         {/* Micronutrients Toggle */}
         <TouchableOpacity 
           onPress={() => setShowMicros(!showMicros)}
-          className={`flex-row justify-between items-center py-2 px-3 bg-[#F8F9F8] rounded-xl border border-border-muted mb-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
+          className={`flex-row justify-between items-center py-2 px-3 bg-bg-base rounded-xl border border-border-muted mb-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}
         >
           <Text className="text-[11px] font-outfit-semibold text-text-primary">
             {showMicros ? t.hideMicros : t.showMicros}
@@ -760,13 +873,13 @@ export default function FoodSearchScreen() {
           <Ionicons 
             name={showMicros ? "chevron-up" : "chevron-down"} 
             size={14} 
-            color="#626A66" 
+            color={isDark ? '#8A9690' : '#626A66'} 
           />
         </TouchableOpacity>
 
         {/* Micronutrients Content */}
         {showMicros && (
-          <View className="bg-[#F8F9F8] border border-border-muted rounded-xl p-3 mb-3.5">
+          <View className="bg-bg-base border border-border-muted rounded-xl p-3 mb-3.5">
             <View className={`flex-row flex-wrap justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
               {microsList.map((item) => {
                 const val = getMicroValue(item.key);
@@ -800,11 +913,11 @@ export default function FoodSearchScreen() {
         <View className={`flex-row items-center mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <TouchableOpacity 
             onPress={() => setWeight(Math.max(10, weight - 25))}
-            className="w-10 h-10 rounded-xl bg-[#EAECEB] justify-center items-center"
+            className="w-10 h-10 rounded-xl bg-[#EAECEB] dark:bg-border-muted justify-center items-center"
           >
             <Text className="text-lg font-outfit-bold text-text-primary">-</Text>
           </TouchableOpacity>
-          <View className="flex-1 bg-[#F8F9F8] border border-border-muted rounded-xl mx-3 flex-row justify-center items-center px-3 py-1">
+          <View className="flex-1 bg-bg-base border border-border-muted rounded-xl mx-3 flex-row justify-center items-center px-3 py-1">
             <TextInput
               keyboardType="numeric"
               value={weight === 0 ? '' : String(weight)}
@@ -815,7 +928,7 @@ export default function FoodSearchScreen() {
               style={{
                 fontFamily: 'Outfit-Bold',
                 fontSize: 14,
-                color: '#1A1E1C',
+                color: isDark ? '#E5EAE5' : '#1A1E1C',
                 textAlign: 'right',
                 minWidth: 40,
                 paddingVertical: Platform.OS === 'ios' ? 8 : 4,
@@ -829,7 +942,7 @@ export default function FoodSearchScreen() {
           </View>
           <TouchableOpacity 
             onPress={() => setWeight(Math.min(1000, weight + 25))}
-            className="w-10 h-10 rounded-xl bg-[#EAECEB] justify-center items-center"
+            className="w-10 h-10 rounded-xl bg-[#EAECEB] dark:bg-border-muted justify-center items-center"
           >
             <Text className="text-lg font-outfit-bold text-text-primary">+</Text>
           </TouchableOpacity>
@@ -848,7 +961,7 @@ export default function FoodSearchScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: mode === 'search' ? '#F8F9F8' : '#1A1E1C' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: mode === 'search' ? (isDark ? '#101412' : '#F8F9F8') : '#1A1E1C' }}>
       <StatusBar style={mode === 'search' ? 'dark' : 'light'} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -857,7 +970,7 @@ export default function FoodSearchScreen() {
         
         {/* Header */}
         {mode === 'search' && (
-          <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
             <TouchableOpacity 
               onPress={() => {
                 if (selectedFood && mode === 'search') {
@@ -869,7 +982,7 @@ export default function FoodSearchScreen() {
                   router.back();
                 }
               }}
-              className="py-1.5 px-3 rounded-xl bg-[#EAECEB]"
+              className="py-1.5 px-3 rounded-xl bg-[#EAECEB] dark:bg-border-muted"
             >
               <Text className="text-text-muted text-xs font-outfit-bold">{t.back}</Text>
             </TouchableOpacity>
@@ -881,8 +994,8 @@ export default function FoodSearchScreen() {
         {mode === 'search' && (
           <View className="flex-1 p-5">
             {/* Search bar & Suffix shortcuts */}
-            <View className={`flex-row items-center bg-white border border-border-muted rounded-2xl ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <Ionicons name="search" size={20} color="#626A66" className="mx-3" />
+            <View className={`flex-row items-center bg-bg-card border border-border-muted rounded-2xl ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <Ionicons name="search" size={20} color={isDark ? '#8A9690' : '#626A66'} className="mx-3" />
               <TextInput
                 className={`flex-1 py-3.5 font-inter-regular text-xs text-text-primary ${isRtl ? 'text-right' : 'text-left'}`}
                 placeholder={t.searchPlaceholder}
@@ -893,10 +1006,10 @@ export default function FoodSearchScreen() {
               {/* Camera triggers */}
               <View className="flex-row pr-2">
                 <TouchableOpacity onPress={triggerBarcodeScan} className="w-9 h-9 rounded-xl bg-accent-mint justify-center items-center ml-1.5">
-                  <Ionicons name="barcode-outline" size={22} color="#4C6E58" />
+                  <Ionicons name="barcode-outline" size={22} color={isDark ? '#5C856C' : '#4C6E58'} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={triggerCameraScan} className="w-9 h-9 rounded-xl bg-accent-mint justify-center items-center ml-1.5">
-                  <Ionicons name="camera-outline" size={22} color="#4C6E58" />
+                  <Ionicons name="camera-outline" size={22} color={isDark ? '#5C856C' : '#4C6E58'} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -904,7 +1017,7 @@ export default function FoodSearchScreen() {
             {/* Searched Results List */}
             {loading ? (
               <View className="flex-1 justify-center items-center pb-20">
-                <ActivityIndicator size="large" color="#4C6E58" />
+                <ActivityIndicator size="large" color={isDark ? '#5C856C' : '#4C6E58'} />
               </View>
             ) : searchQuery.trim() !== '' ? (
               filteredFoods.length > 0 ? (
@@ -913,8 +1026,8 @@ export default function FoodSearchScreen() {
                     <TouchableOpacity
                       key={food.id}
                       onPress={() => handleSelectFood(food)}
-                      className={`flex-row justify-between items-center py-3.5 px-4 rounded-2xl mb-2 bg-white border ${
-                        selectedFood?.id === food.id ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                      className={`flex-row justify-between items-center py-3.5 px-4 rounded-2xl mb-2 bg-bg-card border ${
+                        selectedFood?.id === food.id ? 'border-accent-sage bg-[#F3F6F3] dark:bg-border-muted' : 'border-border-muted'
                       } ${isRtl ? 'flex-row-reverse' : ''}`}
                     >
                       <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'}`}>
@@ -928,14 +1041,14 @@ export default function FoodSearchScreen() {
                       <Ionicons 
                         name={selectedFood?.id === food.id ? "checkmark-circle" : "chevron-forward-outline"} 
                         size={20} 
-                        color={selectedFood?.id === food.id ? "#4C6E58" : "#626A66"} 
+                        color={selectedFood?.id === food.id ? (isDark ? "#5C856C" : "#4C6E58") : (isDark ? "#8A9690" : "#626A66")} 
                       />
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
               ) : (
                 <View className="flex-1 justify-center items-center pb-20">
-                  <Ionicons name="search-outline" size={48} color="#EAECEB" />
+                  <Ionicons name="search-outline" size={48} color={isDark ? '#2E3531' : '#EAECEB'} />
                   <Text className="text-xs text-text-muted font-inter-regular mt-4 text-center">
                     {isRtl ? 'لم يتم العثور على نتائج للبحث.' : 'No search results found.'}
                   </Text>
@@ -953,8 +1066,8 @@ export default function FoodSearchScreen() {
                       <TouchableOpacity
                         key={`recent:${food.id}`}
                         onPress={() => handleSelectFood(food)}
-                        className={`flex-row justify-between items-center py-3.5 px-4 rounded-2xl mb-2 bg-white border ${
-                          selectedFood?.id === food.id ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                        className={`flex-row justify-between items-center py-3.5 px-4 rounded-2xl mb-2 bg-bg-card border ${
+                          selectedFood?.id === food.id ? 'border-accent-sage bg-[#F3F6F3] dark:bg-border-muted' : 'border-border-muted'
                         } ${isRtl ? 'flex-row-reverse' : ''}`}
                       >
                         <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'}`}>
@@ -968,7 +1081,7 @@ export default function FoodSearchScreen() {
                         <Ionicons 
                           name={selectedFood?.id === food.id ? "checkmark-circle" : "chevron-forward-outline"} 
                           size={20} 
-                          color={selectedFood?.id === food.id ? "#4C6E58" : "#626A66"} 
+                          color={selectedFood?.id === food.id ? (isDark ? "#5C856C" : "#4C6E58") : (isDark ? "#8A9690" : "#626A66")} 
                         />
                       </TouchableOpacity>
                     ))}
@@ -980,14 +1093,14 @@ export default function FoodSearchScreen() {
                     {t.dbFoodsHeader}
                   </Text>
                   {loadingDbFoods ? (
-                    <ActivityIndicator size="small" color="#4C6E58" className="my-4" />
+                    <ActivityIndicator size="small" color={isDark ? '#5C856C' : '#4C6E58'} className="my-4" />
                   ) : dbFoods.length > 0 ? (
                     dbFoods.map((food) => (
                       <TouchableOpacity
                         key={`db:${food.id}`}
                         onPress={() => handleSelectFood(food)}
-                        className={`flex-row justify-between items-center py-3.5 px-4 rounded-2xl mb-2 bg-white border ${
-                          selectedFood?.id === food.id ? 'border-accent-sage bg-[#F3F6F3]' : 'border-border-muted'
+                        className={`flex-row justify-between items-center py-3.5 px-4 rounded-2xl mb-2 bg-bg-card border ${
+                          selectedFood?.id === food.id ? 'border-accent-sage bg-[#F3F6F3] dark:bg-border-muted' : 'border-border-muted'
                         } ${isRtl ? 'flex-row-reverse' : ''}`}
                       >
                         <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'}`}>
@@ -1001,7 +1114,7 @@ export default function FoodSearchScreen() {
                         <Ionicons 
                           name={selectedFood?.id === food.id ? "checkmark-circle" : "chevron-forward-outline"} 
                           size={20} 
-                          color={selectedFood?.id === food.id ? "#4C6E58" : "#626A66"} 
+                          color={selectedFood?.id === food.id ? (isDark ? "#5C856C" : "#4C6E58") : (isDark ? "#8A9690" : "#626A66")} 
                         />
                       </TouchableOpacity>
                     ))
@@ -1035,11 +1148,11 @@ export default function FoodSearchScreen() {
             </View>
 
             {!permission ? (
-              <ActivityIndicator size="small" color="#4C6E58" />
+              <ActivityIndicator size="small" color={isDark ? '#5C856C' : '#4C6E58'} />
             ) : !permission.granted ? (
               // Permission Denied or Simulator UI Fallback
               <View className="flex-1 justify-center items-center">
-                <View className="w-full max-w-sm bg-white p-6 rounded-[28] border border-border-muted shadow-lg items-center">
+                <View className="w-full max-w-sm bg-bg-card p-6 rounded-[28] border border-border-muted shadow-lg items-center">
                   <Ionicons name="camera-outline" size={48} color="#D13A3A" className="mb-3" />
                   <Text className="text-text-primary font-outfit-bold text-center text-sm mb-1">
                     {isRtl ? 'الكاميرا غير متوفرة أو تم رفض الإذن' : 'Camera Unavailable / Permission Denied'}
@@ -1056,13 +1169,13 @@ export default function FoodSearchScreen() {
                     placeholder={isRtl ? 'اتب الباركود هنا (مثال: 6223000100412)' : 'Type barcode here (e.g., 6223000100412)'}
                     keyboardType="number-pad"
                     style={{ height: 42 }}
-                    className="w-full bg-[#F3F6F3] border border-border-muted rounded-xl px-4 text-text-primary text-xs mb-3 text-center"
+                    className="w-full bg-[#F3F6F3] dark:bg-border-muted border border-border-muted rounded-xl px-4 text-text-primary text-xs mb-3 text-center"
                   />
 
                   <View className="flex-row gap-2 w-full">
                     <TouchableOpacity
                       onPress={requestPermission}
-                      className="flex-1 bg-[#F3F6F3] py-2.5 rounded-xl justify-center items-center"
+                      className="flex-1 bg-[#F3F6F3] dark:bg-border-muted py-2.5 rounded-xl justify-center items-center"
                     >
                       <Text className="text-text-primary font-outfit-bold text-xs">{isRtl ? 'طلب الإذن' : 'Request Access'}</Text>
                     </TouchableOpacity>
@@ -1129,7 +1242,7 @@ export default function FoodSearchScreen() {
           </View>
         )}
 
-        {/* AI Vision Viewport Mockup */}
+        {/* AI Vision Scanner */}
         {mode === 'camera' && (
           <View className="flex-1 bg-[#1A1E1C]">
             {/* Header info */}
@@ -1141,25 +1254,84 @@ export default function FoodSearchScreen() {
             </View>
 
             {cameraState === 'idle' && (
-              <View className="flex-1 justify-center items-center pb-20">
-                <View className="w-[260] h-[260] rounded-full border-[4] border-border-muted border-dashed justify-center items-center mb-10">
-                  <Ionicons name="camera" size={64} color="#EAECEB" />
+              <View className="flex-1 justify-center items-center pb-20 px-6">
+                {/* Live camera viewport */}
+                {permission?.granted ? (
+                  <View className="w-full flex-1 rounded-3xl overflow-hidden bg-black mb-6">
+                    <CameraView
+                      ref={cameraRef}
+                      facing="back"
+                      style={{ flex: 1 }}
+                    />
+                  </View>
+                ) : (
+                  <View className="w-[260] h-[260] rounded-full border-[4] border-border-muted border-dashed justify-center items-center mb-10">
+                    <Ionicons name="camera" size={64} color={isDark ? '#2E3531' : '#EAECEB'} />
+                  </View>
+                )}
+
+                {permission?.granted && !permission?.canAskAgain && (
+                  <Text className="color-white/70 text-xs text-center mb-4 font-inter-regular">
+                    {isRtl
+                      ? 'تم رفض إذن الكاميرا. يمكنك الاختيار من المعرض بدلاً من ذلك.'
+                      : 'Camera permission denied. You can pick from gallery instead.'}
+                  </Text>
+                )}
+
+                <View className="flex-row items-center gap-3">
+                  {permission?.granted && (
+                    <PresstoButton
+                      onPress={handleSnapPhoto}
+                      className="bg-accent-sage rounded-2xl py-3.5 px-6"
+                    >
+                      <Text className="text-white font-outfit-bold text-sm">{t.cameraSnap}</Text>
+                    </PresstoButton>
+                  )}
+                  <PresstoButton
+                    onPress={handlePickFromGallery}
+                    className="bg-white/10 rounded-2xl py-3.5 px-6 flex-row items-center"
+                  >
+                    <Ionicons name="images-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text className="text-white font-outfit-bold text-sm">{t.cameraGallery}</Text>
+                  </PresstoButton>
                 </View>
-                <PresstoButton 
-                  onPress={handleSnapPhoto}
-                  className="bg-accent-sage rounded-2xl py-3.5 px-6"
-                >
-                  <Text className="text-white font-outfit-bold text-sm">{isRtl ? 'التقاط صورة الوجبة' : 'Snap Meal Photo'}</Text>
-                </PresstoButton>
+
+                {!permission?.granted && permission?.canAskAgain && (
+                  <PresstoButton
+                    onPress={() => requestPermission()}
+                    className="bg-accent-sage rounded-2xl py-3 px-5 mt-4"
+                  >
+                    <Text className="text-white font-outfit-bold text-sm">
+                      {isRtl ? 'السماح بالوصول للكاميرا' : 'Allow Camera Access'}
+                    </Text>
+                  </PresstoButton>
+                )}
               </View>
             )}
 
             {cameraState === 'scanning' && (
               <View className="flex-1 justify-center items-center">
-                <ActivityIndicator size="large" color="#4C6E58" />
+                <ActivityIndicator size="large" color={isDark ? '#5C856C' : '#4C6E58'} />
                 <Text className="color-white mt-5 font-outfit-bold text-sm">
                   {t.cameraScanning}
                 </Text>
+              </View>
+            )}
+
+            {cameraState === 'error' && (
+              <View className="flex-1 justify-center items-center px-8">
+                <Ionicons name="alert-circle-outline" size={56} color="#E58C73" />
+                <Text className="color-white mt-4 font-outfit-bold text-sm text-center">
+                  {t.cameraError}
+                </Text>
+                {cameraError ? (
+                  <Text className="color-white/60 mt-2 text-xs text-center font-inter-regular">
+                    {cameraError}
+                  </Text>
+                ) : null}
+                <PresstoButton onPress={handleRetake} className="bg-accent-sage rounded-2xl py-3 px-5 mt-6">
+                  <Text className="text-white font-outfit-bold text-sm">{t.cameraRetake}</Text>
+                </PresstoButton>
               </View>
             )}
 
@@ -1167,9 +1339,11 @@ export default function FoodSearchScreen() {
               <View className="flex-1 justify-between">
                 {/* Picture view containing absolute overlays */}
                 <View className="flex-1 relative bg-black">
-                  <Image source={{ uri: cameraImage }} className="w-full h-full opacity-90 resize-cover" />
-                  
-                  {/* Floating tags mapped dynamically */}
+                  <Image source={{ uri: cameraImage }} className="w-full h-full opacity-90" resizeMode="cover" />
+
+                  {/* Floating tags mapped dynamically. Each tag is centered on
+                      its anchor_point by translating -50%/-50% so the dot lands
+                      exactly at [x%, y%] of the image (per ai_vision.md §3). */}
                   {detectedItems.map((item, index) => {
                     const leftPercent = `${item.anchor_point[0]}%`;
                     const topPercent = `${item.anchor_point[1]}%`;
@@ -1180,10 +1354,14 @@ export default function FoodSearchScreen() {
                         key={index}
                         onPress={() => handleSelectOverlayTag(item)}
                         className="absolute items-center z-10"
-                        style={{ left: leftPercent, top: topPercent }}
+                        style={{
+                          left: leftPercent,
+                          top: topPercent,
+                          transform: [{ translateX: -40 }, { translateY: -15 }],
+                        }}
                       >
                         <View className="w-[2] h-5 bg-white" />
-                        <View className={`w-2.5 h-2.5 rounded-full bg-white border-2 ${
+                        <View className={`w-2.5 h-2.5 rounded-full bg-bg-card border-2 ${
                           isSelected ? 'border-nutrient-calories' : 'border-accent-sage'
                         }`} />
                         <View className={`px-2.5 py-1.5 rounded-xl mt-1 shadow ${
@@ -1196,12 +1374,32 @@ export default function FoodSearchScreen() {
                       </PresstoButton>
                     );
                   })}
+
+                  {/* Retake control */}
+                  <TouchableOpacity
+                    onPress={handleRetake}
+                    className="absolute top-4 right-4 z-20 flex-row items-center bg-black/50 rounded-full px-3 py-2"
+                  >
+                    <Ionicons name="refresh" size={14} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text className="text-white text-xs font-inter-semibold">{t.cameraRetake}</Text>
+                  </TouchableOpacity>
+
+                  {/* Empty state when Gemini returned no items */}
+                  {detectedItems.length === 0 && (
+                    <View className="absolute inset-0 justify-center items-center z-20">
+                      <View className="bg-black/70 rounded-2xl px-5 py-4">
+                        <Text className="color-white text-xs text-center font-inter-regular">
+                          {t.cameraEmpty}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                 </View>
 
                 {/* Slider adjustment bottom box */}
                 <View className="bg-bg-base rounded-t-[32] p-5 border border-border-muted pb-8">
                   <View className="flex-row justify-center items-center mb-3">
-                    <Ionicons name="sparkles" size={18} color="#4C6E58" style={{ marginRight: 6 }} />
+                    <Ionicons name="sparkles" size={18} color={isDark ? '#5C856C' : '#4C6E58'} style={{ marginRight: 6 }} />
                     <Text className="text-sm font-outfit-bold text-text-primary">
                       {t.cameraSuccess}
                     </Text>

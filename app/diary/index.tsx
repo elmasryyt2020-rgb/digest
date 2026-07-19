@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useDiaryStore } from '@/store/useDiaryStore';
+import { useColorScheme } from 'nativewind';
 
 interface MicroNutrientProps {
   name_en: string;
@@ -17,7 +18,10 @@ interface MicroNutrientProps {
 
 // MicroBar progress indicator
 function MicroBar({ name_en, name_ar, value, target, unit, color, isRtl }: MicroNutrientProps) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const percentage = Math.min((value / (target || 1)) * 100, 100);
+  const resolvedColor = color === '#4C6E58' && isDark ? '#5C856C' : color;
   
   return (
     <View className="mb-4">
@@ -27,11 +31,11 @@ function MicroBar({ name_en, name_ar, value, target, unit, color, isRtl }: Micro
           {Math.round(value * 10) / 10} / {target} {unit}
         </Text>
       </View>
-      <View className="h-1.5 bg-[#F0F2F0] rounded-full overflow-hidden">
+      <View className="h-1.5 bg-[#F0F2F0] dark:bg-border-muted rounded-full overflow-hidden">
         <View 
           className="h-full rounded-full"
           style={{ 
-            backgroundColor: color, 
+            backgroundColor: resolvedColor, 
             width: `${percentage}%` 
           }} 
         />
@@ -43,6 +47,8 @@ function MicroBar({ name_en, name_ar, value, target, unit, color, isRtl }: Micro
 export default function DiaryDetailsScreen() {
   const router = useRouter();
   const profile = useDiaryStore((state) => state.profile);
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const foodLogs = useDiaryStore((state) => state.foodLogs);
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -109,56 +115,51 @@ export default function DiaryDetailsScreen() {
     cholesterol: 300, 
   };
 
+  const isFiberOptimal = micros.fiber >= targets.fiber;
+  const isVitDLow = micros.vitaminD < (targets.vitaminD / 2);
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9F8' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       {/* Header */}
-      <View className={`flex-row justify-between items-center px-5 py-4 bg-white border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <TouchableOpacity 
-          onPress={() => router.back()} 
-          className={`flex-row items-center py-1.5 px-3 rounded-xl bg-accent-mint ${isRtl ? 'flex-row-reverse' : ''}`}
-        >
-          <Ionicons name={isRtl ? 'arrow-forward' : 'arrow-back'} size={18} color="#4C6E58" />
-          <Text className={`font-outfit-bold text-accent-sage text-xs mx-1`}>
-            {t.back}
-          </Text>
+      <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <TouchableOpacity onPress={() => router.back()} className="p-1">
+          <Ionicons name={isRtl ? 'arrow-forward' : 'arrow-back'} size={18} color={isDark ? '#5C856C' : '#4C6E58'} />
         </TouchableOpacity>
         <Text className="text-base font-outfit-bold text-text-primary">{t.title}</Text>
-        <View className="w-16" />
+        <View className="w-8" />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        
-        {/* Dynamic Alerts based on actual levels */}
-        {totalWeight > 0 && (
-          <View className="mb-5">
-            {/* Optimal Alert */}
-            {micros.fiber >= targets.fiber && (
-              <View className={`flex-row p-3.5 rounded-2xl mb-3 border bg-accent-mint border-[#C3D9B6] ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <Ionicons name="checkmark-circle" size={18} color="#4C6E58" style={{ marginRight: isRtl ? 0 : 8, marginLeft: isRtl ? 8 : 0 }} />
-                <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'}`}>
-                  <Text className="text-xs font-outfit-bold text-accent-sage mb-0.5">{t.optimal}</Text>
-                  <Text className="text-[10px] font-inter-medium text-text-muted leading-relaxed">{t.fiberMsg}</Text>
-                </View>
-              </View>
-            )}
+        <Text className={`text-xs text-text-muted mb-5 ${isRtl ? 'text-right' : 'text-left'}`}>
+          {t.subtitle}
+        </Text>
 
-            {/* Warning Alert */}
-            {micros.vitaminD < (targets.vitaminD / 2) && (
-              <View className={`flex-row p-3.5 rounded-2xl mb-3 border bg-[#FFF2EE] border-[#FBD5D5] ${isRtl ? 'flex-row-reverse' : ''}`}>
+        {/* Dynamic AI Insights / Alerts */}
+        {totalWeight > 0 ? (
+          <View>
+            {isFiberOptimal ? (
+              <View className={`flex-row p-3.5 rounded-2xl mb-3 border bg-accent-mint border-[#C3D9B6] dark:border-[#243E2C] ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <Ionicons name="checkmark-circle" size={18} color={isDark ? '#5C856C' : '#4C6E58'} style={{ marginRight: isRtl ? 0 : 8, marginLeft: isRtl ? 8 : 0 }} />
+                <Text className="text-[11px] font-inter-semibold text-accent-sage flex-1">
+                  {t.fiberMsg}
+                </Text>
+              </View>
+            ) : null}
+
+            {isVitDLow ? (
+              <View className={`flex-row p-3.5 rounded-2xl mb-3 border bg-[#FFF2EE] dark:bg-[#2C1A16] border-[#FBD5D5] dark:border-[#52251D] ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <Ionicons name="warning" size={18} color="#E58C73" style={{ marginRight: isRtl ? 0 : 8, marginLeft: isRtl ? 8 : 0 }} />
-                <View className={`flex-1 ${isRtl ? 'items-end' : 'items-start'}`}>
-                  <Text className="text-xs font-outfit-bold text-nutrient-calories mb-0.5">{t.warning}</Text>
-                  <Text className="text-[10px] font-inter-medium text-text-muted leading-relaxed">{t.vitDMsg}</Text>
-                </View>
+                <Text className="text-[11px] font-inter-semibold text-nutrient-calories flex-1">
+                  {t.vitDMsg}
+                </Text>
               </View>
-            )}
+            ) : null}
           </View>
-        )}
+        ) : null}
 
-        {/* Vitamins Section */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.vitamins}</Text>
-          
+        {/* Section: Vitamins */}
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`font-outfit-bold text-sm text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.vitamins}</Text>
           <MicroBar name_en="Vitamin A" name_ar="فيتامين أ" value={micros.vitaminA} target={targets.vitaminA} unit="mcg" color="#7E9DB0" isRtl={isRtl} />
           <MicroBar name_en="Vitamin C" name_ar="فيتامين ج" value={micros.vitaminC} target={targets.vitaminC} unit="mg" color="#E58C73" isRtl={isRtl} />
           <MicroBar name_en="Vitamin D" name_ar="فيتامين د" value={micros.vitaminD} target={targets.vitaminD} unit="mcg" color="#D3B177" isRtl={isRtl} />
@@ -167,10 +168,9 @@ export default function DiaryDetailsScreen() {
           <MicroBar name_en="Folate" name_ar="حمض الفوليك" value={micros.folate} target={targets.folate} unit="mcg" color="#4C6E58" isRtl={isRtl} />
         </View>
 
-        {/* Minerals Section */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.minerals}</Text>
-
+        {/* Section: Minerals */}
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`font-outfit-bold text-sm text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.minerals}</Text>
           <MicroBar name_en="Calcium" name_ar="الكالسيوم" value={micros.calcium} target={targets.calcium} unit="mg" color="#7E9DB0" isRtl={isRtl} />
           <MicroBar name_en="Iron" name_ar="الحديد" value={micros.iron} target={targets.iron} unit="mg" color="#E58C73" isRtl={isRtl} />
           <MicroBar name_en="Potassium" name_ar="البوتاسيوم" value={micros.potassium} target={targets.potassium} unit="mg" color="#D3B177" isRtl={isRtl} />
@@ -178,18 +178,16 @@ export default function DiaryDetailsScreen() {
           <MicroBar name_en="Magnesium" name_ar="المغنيسيوم" value={micros.magnesium} target={targets.magnesium} unit="mg" color="#4C6E58" isRtl={isRtl} />
         </View>
 
-        {/* Carbohydrates Details */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.carbDetails}</Text>
-
+        {/* Section: Carbs details */}
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`font-outfit-bold text-sm text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.carbDetails}</Text>
           <MicroBar name_en="Dietary Fiber" name_ar="الألياف الغذائية" value={micros.fiber} target={targets.fiber} unit="g" color="#4C6E58" isRtl={isRtl} />
           <MicroBar name_en="Total Sugars" name_ar="السكريات الكلية" value={micros.sugar} target={targets.sugar} unit="g" color="#E58C73" isRtl={isRtl} />
         </View>
 
-        {/* Fats Details */}
-        <View className="bg-white rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
-          <Text className={`text-sm font-outfit-bold text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.fatDetails}</Text>
-
+        {/* Section: Fat details */}
+        <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+          <Text className={`font-outfit-bold text-sm text-text-primary mb-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t.fatDetails}</Text>
           <MicroBar name_en="Saturated Fat" name_ar="الدهون المشبعة" value={micros.saturated} target={targets.saturated} unit="g" color="#9CA19E" isRtl={isRtl} />
           <MicroBar name_en="Trans Fat" name_ar="الدهون المتحولة" value={micros.trans} target={targets.trans} unit="g" color="#E58C73" isRtl={isRtl} />
           <MicroBar name_en="Cholesterol" name_ar="الكوليسترول" value={micros.cholesterol} target={targets.cholesterol} unit="mg" color="#7E9DB0" isRtl={isRtl} />

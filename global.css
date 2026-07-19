@@ -1,3 +1,24 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg-base: #F8F9F8;
+  --bg-card: #FFFFFF;
+  --border-muted: #EAECEB;
+  --text-primary: #1A1E1C;
+  --text-muted: #626A66;
+  --accent-sage: #4C6E58;
+  --accent-mint: #E2ECD7;
+}
+
+.dark {
+  --bg-base: #101412;
+  --bg-card: #161B18;
+  --border-muted: #242C28;
+  --text-primary: #ECF1EE;
+  --text-muted: #8A9690;
+  --accent-sage: #5C856C;
+  --accent-mint: #1F2E25;
+}
+

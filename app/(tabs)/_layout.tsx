@@ -2,10 +2,13 @@ import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function TabLayout() {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const language = useDiaryStore((state) => state.profile?.language) || 'ar';
   const isRtl = language === 'ar';
 
@@ -22,13 +25,13 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#4C6E58', // Sage Green primary active color
-        tabBarInactiveTintColor: '#626A66', // Muted Gray
+        tabBarActiveTintColor: isDark ? '#5C856C' : '#4C6E58', // Sage Green dynamic
+        tabBarInactiveTintColor: isDark ? '#8A9690' : '#626A66', // Muted Gray dynamic
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: isDark ? '#161B18' : '#FFFFFF',
           borderTopWidth: 1,
-          borderTopColor: '#EAECEB',
+          borderTopColor: isDark ? '#242C28' : '#EAECEB',
           height: Platform.OS === 'ios' ? 88 : 64,
           paddingBottom: Platform.OS === 'ios' ? 28 : 10,
           paddingTop: 8,
