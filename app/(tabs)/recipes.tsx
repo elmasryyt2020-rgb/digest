@@ -365,6 +365,26 @@ export default function RecipesScreen() {
                   })}
                 </View>
 
+                {/* Selected custom/searched ingredients */}
+                {selectedIngredients.filter(name => !commonIngredients.some(c => (language === 'ar' ? c.name_ar : c.name_en) === name)).length > 0 && (
+                  <View className={`flex-row flex-wrap mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    {selectedIngredients
+                      .filter(name => !commonIngredients.some(c => (language === 'ar' ? c.name_ar : c.name_en) === name))
+                      .map((name) => (
+                        <TouchableOpacity
+                          key={name}
+                          onPress={() => handleToggleIngredient(name)}
+                          className="flex-row items-center bg-accent-mint border border-accent-sage px-3 py-2 rounded-2xl mr-2 mb-2"
+                          accessibilityRole="button"
+                          accessibilityLabel={`${name}, ${isRtl ? 'اضغط للحذف' : 'tap to remove'}`}
+                        >
+                          <Text className="text-xs font-inter-medium text-text-primary font-outfit-bold mr-1">{name}</Text>
+                          <Ionicons name="close-circle" size={14} color="#4C6E58" />
+                        </TouchableOpacity>
+                      ))}
+                  </View>
+                )}
+
                 {/* Custom input */}
                 <View className={`flex-row items-center mt-2 gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <View className="flex-1 relative">
