@@ -57,16 +57,19 @@ function OnboardShell({
 
         {/* Progressive step dots */}
         <View className="flex-row items-center space-x-1.5 gap-1.5">
-          {Array.from({ length: total }).map((_, i) => (
-            <View
-              key={i}
-              className="h-1.5 rounded-full"
-              style={{
-                width: i === step ? 20 : 6,
-                backgroundColor: i <= step ? (isDark ? '#5C856C' : '#4C6E58') : (isDark ? 'rgba(138, 150, 144, 0.15)' : 'rgba(98, 106, 102, 0.15)'),
-              }}
-            />
-          ))}
+          {Array.from({ length: total }).map((_, i) => {
+            const activeStep = step === 4 ? 3 : step;
+            return (
+              <View
+                key={i}
+                className="h-1.5 rounded-full"
+                style={{
+                  width: i === activeStep ? 20 : 6,
+                  backgroundColor: i <= activeStep ? (isDark ? '#5C856C' : '#4C6E58') : (isDark ? 'rgba(138, 150, 144, 0.15)' : 'rgba(98, 106, 102, 0.15)'),
+                }}
+              />
+            );
+          })}
         </View>
 
         {/* Skip action */}
@@ -112,7 +115,7 @@ export default function OnboardingScreen() {
   const isDark = colorScheme === 'dark';
 
   // Form states
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0); // 0: Body Details, 1: Goals & Activity, 2: Diet & Preferences, 3: Calculations Loading
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0); // 0: Body Details, 1: Goals & Activity, 2: Diet & Preferences, 3: Weekly Budget, 4: Calculations Loading
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [birthYear, setBirthYear] = useState('1998');
   const [height, setHeight] = useState('175');
@@ -121,16 +124,17 @@ export default function OnboardingScreen() {
   const [goal, setGoal] = useState<'lose_weight' | 'maintain_weight' | 'gain_weight'>('lose_weight');
   const [dietType, setDietType] = useState<'classic' | 'vegetarian' | 'vegan' | 'keto' | 'low_carb'>('classic');
   const [exclusions, setExclusions] = useState<string[]>([]);
+  const [budget, setBudget] = useState<'low' | 'medium' | 'high'>('medium');
 
   // Loading shim states for Step 3
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingText, setLoadingText] = useState('Analyzing biometrics...');
   const spinValue = useRef(new Animated.Value(0)).current;
 
-  // Setup spinning animation for Step 3
+  // Setup spinning animation for Step 4
   useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null;
-    if (step === 3) {
+    if (step === 4) {
       animation = Animated.loop(
         Animated.timing(spinValue, {
           toValue: 1,
@@ -150,7 +154,7 @@ export default function OnboardingScreen() {
 
   // Loading steps simulation & AI meal plan generation
   useEffect(() => {
-    if (step === 3) {
+    if (step === 4) {
       let isMounted = true;
       let currentProgress = 0;
 
@@ -194,6 +198,7 @@ export default function OnboardingScreen() {
           diet_type: dietType,
           exclusions: exclusions,
           disliked_ingredients: [],
+          budget,
         };
 
         const targets = calculateNutrientTargets(baseProfile);
@@ -210,6 +215,7 @@ export default function OnboardingScreen() {
               diet_type: dietType,
               exclusions,
               country: detectedCountry,
+              budget,
             }
           });
 
@@ -268,7 +274,7 @@ export default function OnboardingScreen() {
         clearInterval(progressInterval);
       };
     }
-  }, [step]);
+  }, [step, budget]);
 
   const spin = spinValue.interpolate({
     inputRange: [0, 1],
@@ -299,6 +305,10 @@ export default function OnboardingScreen() {
     setStep(3);
   };
 
+  const handleStep3Next = () => {
+    setStep(4);
+  };
+
   const toggleExclusion = (id: string) => {
     if (exclusions.includes(id)) {
       setExclusions(exclusions.filter(e => e !== id));
@@ -321,7 +331,7 @@ export default function OnboardingScreen() {
           >
             <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
               <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
-                Step 1 of 3 · Body Details
+                Step 1 of 4 · Body Details
               </Text>
               <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
                 Your body details.
@@ -420,7 +430,7 @@ export default function OnboardingScreen() {
           >
             <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
               <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
-                Step 2 of 3 · Goals & Activity
+                Step 2 of 4 · Goals & Activity
               </Text>
               <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
                 Daily activity & goals.
@@ -496,12 +506,12 @@ export default function OnboardingScreen() {
         {step === 2 && (
           <OnboardShell
             step={2}
-            ctaLabel="Calculate plan"
+            ctaLabel="Continue"
             onNext={handleStep2Next}
           >
             <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
               <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
-                Step 3 of 3 · Diet & Preferences
+                Step 3 of 4 · Diet & Preferences
               </Text>
               <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
                 Diet type & exclusions.
@@ -580,6 +590,56 @@ export default function OnboardingScreen() {
         {step === 3 && (
           <OnboardShell
             step={3}
+            ctaLabel="Calculate plan"
+            onNext={handleStep3Next}
+          >
+            <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+              <Text className="font-outfit-semibold text-[11px] text-text-muted uppercase tracking-wider mb-2">
+                Step 4 of 4 · Weekly Budget
+              </Text>
+              <Text className="font-outfit-bold text-3xl text-text-primary tracking-tight mb-3">
+                Choose your grocery budget.
+              </Text>
+              <Text className="font-inter text-sm text-text-muted leading-relaxed mb-6">
+                Choose a weekly grocery tier. The app plans nutritious meals using localized Egyptian market prices.
+              </Text>
+
+              <View className="gap-3">
+                {[
+                  { id: 'low', label: 'Low Budget', desc: '600 EGP/month (~150 EGP/week)\nFocuses on staples, cottage cheese, eggs, pasta, lentils' },
+                  { id: 'medium', label: 'Medium Budget', desc: '1000 EGP/month (~250 EGP/week)\nAdds eggs, black honey, tahini, and more variety' },
+                  { id: 'high', label: 'High Budget', desc: '1400 EGP/month (~350 EGP/week)\nAdds ghee, imported beef, halva, and premium items' }
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => setBudget(item.id as any)}
+                    className={`p-4 border rounded-2xl bg-bg-card flex-row justify-between items-center ${
+                      budget === item.id ? 'border-accent-sage bg-[#F3F6F3] dark:bg-[#1F2E25]' : 'border-border-muted'
+                    }`}
+                  >
+                    <View className="flex-1 pr-3">
+                      <Text className={`text-sm font-outfit-bold ${budget === item.id ? 'text-text-primary font-outfit-bold' : 'text-text-primary'}`}>
+                        {item.label}
+                      </Text>
+                      <Text className="text-xs text-text-muted mt-1 leading-normal">
+                        {item.desc}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name={budget === item.id ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={budget === item.id ? (isDark ? "#5C856C" : "#4C6E58") : (isDark ? "#8A9690" : "#626A66")}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </OnboardShell>
+        )}
+
+        {step === 4 && (
+          <OnboardShell
+            step={4}
             showFooter={false}
             skip={false}
             onNext={() => {}}
