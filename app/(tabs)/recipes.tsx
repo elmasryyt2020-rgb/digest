@@ -10,6 +10,7 @@ import {
   Platform,
   StyleSheet,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,7 +22,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { localRecipes, RecipeType } from '@/data/localRecipes';
 import { PresstoButton } from '@/components/PresstoButton';
 import { supabase } from '@/lib/supabase';
-import { ingredientSuggestions, IngredientSuggestion } from '@/data/ingredients';
+import { ingredientSuggestions, IngredientSuggestion } from '../../data/ingredients';
 
 function getFallbackImage(title?: string, category?: string): string {
   const t = (title || '').toLowerCase();
@@ -103,11 +104,14 @@ export default function RecipesScreen() {
   const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { width: windowWidth } = useWindowDimensions();
+  const cardWidth = windowWidth - 40;
 
   // Zustand State
   const profile = useDiaryStore((state) => state.profile);
   const incrementRecipesCount = useDiaryStore((state) => state.incrementRecipesCount);
   const addGeneratedRecipe = useDiaryStore((state) => state.addGeneratedRecipe);
+  const generatedRecipes = useDiaryStore((state) => state.generatedRecipes);
   const triggerSignUp = useDiaryStore((state) => state.triggerSignUp);
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
   
@@ -147,7 +151,7 @@ export default function RecipesScreen() {
 
   const t = {
     title: isRtl ? 'وصفات ذكية' : 'AI Recipes',
-    recommend: isRtl ? 'اقتراحات لك' : 'Recommended',
+    recommend: isRtl ? 'وصفاتي' : 'My Recipes',
     pantry: isRtl ? 'محتويات الثلاجة' : 'Pantry search',
     ingredientsTitle: isRtl ? 'اختر المكونات المتوفرة لديك:' : 'Select available ingredients:',
     addCustom: isRtl ? 'أضف مكوناً مخصصاً' : 'Add custom ingredient',
@@ -156,6 +160,11 @@ export default function RecipesScreen() {
     protein: isRtl ? 'بروتين' : 'protein',
     carbs: isRtl ? 'كارب' : 'carbs',
     emptyPantry: isRtl ? 'حدد مكونين على الأقل للبدء.' : 'Select at least 2 ingredients to start.',
+    myRecipes: isRtl ? 'وصفاتي المبتكرة' : 'My Generated Recipes',
+    createFirstRecipe: isRtl ? 'ابتكر وصفتك الأولى بالذكاء الاصطناعي!' : 'Create your first AI recipe!',
+    tryPantrySearch: isRtl ? 'استخدم محتويات الثلاجة لابتكار وصفات مخصصة.' : 'Use pantry search to generate custom recipes.',
+    fats: isRtl ? 'دهون' : 'fats',
+    recommendedTitle: isRtl ? 'وصفات مقترحة لك' : 'Recommended for You',
   };
 
   const handleToggleIngredient = (name: string) => {
@@ -272,6 +281,98 @@ export default function RecipesScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* My Recipes Section */}
+          <View className="mb-6">
+            <Text className={`text-sm font-outfit-bold text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
+              {t.myRecipes}
+            </Text>
+            
+            {generatedRecipes.length === 0 ? (
+              <TouchableOpacity
+                onPress={() => setActiveTab('pantry')}
+                className="bg-bg-card border border-dashed border-border-muted rounded-3xl p-5 items-center justify-center"
+                activeOpacity={0.7}
+              >
+                <View className="bg-accent-mint p-3 rounded-full mb-2">
+                  <Ionicons name="restaurant-outline" size={20} color={isDark ? '#5C856C' : '#4C6E58'} />
+                </View>
+                <Text className="text-xs font-outfit-bold text-text-primary mb-1 text-center">
+                  {t.createFirstRecipe}
+                </Text>
+                <Text className="text-[10px] font-inter-regular text-text-muted text-center">
+                  {t.tryPantrySearch}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={cardWidth + 16}
+                decelerationRate="fast"
+                snapToAlignment="start"
+                contentContainerStyle={{ 
+                  flexDirection: isRtl ? 'row-reverse' : 'row',
+                  gap: 16
+                }}
+              >
+                {generatedRecipes.map((recipe) => (
+                  <TouchableOpacity
+                    key={recipe.id}
+                    onPress={() => router.push(`/recipes/${recipe.id}` as any)}
+                    className="bg-bg-card rounded-3xl border border-border-muted overflow-hidden shadow-sm animate-none"
+                    style={{ width: cardWidth }}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={isRtl ? recipe.title_ar : recipe.title_en}
+                  >
+                    <RecipeImage 
+                      uri={recipe.image_url} 
+                      title={language === 'ar' ? recipe.title_ar : recipe.title_en}
+                      category={recipe.category}
+                      heightClass="h-40" 
+                    />
+                    <View className="p-4">
+                      <Text 
+                        numberOfLines={1}
+                        className={`text-sm font-outfit-bold text-text-primary mb-1.5 ${isRtl ? 'text-right' : 'text-left'}`}
+                      >
+                        {isRtl ? recipe.title_ar : recipe.title_en}
+                      </Text>
+                      
+                      <Text 
+                        numberOfLines={2} 
+                        className={`text-[11px] font-inter-regular text-text-muted leading-relaxed mb-3 ${isRtl ? 'text-right' : 'text-left'}`}
+                      >
+                        {isRtl ? recipe.description_ar : recipe.description_en}
+                      </Text>
+
+                      {/* Macros info strip */}
+                      <View className={`flex-row items-center flex-wrap ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <Text className="text-[10px] font-inter-semibold text-text-muted">
+                          🔥 {recipe.total_calories} {t.kcal} |
+                        </Text>
+                        <Text className="text-[10px] font-inter-semibold text-[#7E9DB0] ml-1">
+                          💪 {recipe.total_protein_g}g {t.protein} |
+                        </Text>
+                        <Text className="text-[10px] font-inter-semibold text-[#D3B177] ml-1">
+                          🌾 {recipe.total_carbs_g}g {t.carbs} |
+                        </Text>
+                        <Text className="text-[10px] font-inter-semibold text-[#9CA19E] ml-1">
+                          🥑 {recipe.total_fat_g}g {t.fats}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Recommended Section Header */}
+          <Text className={`text-sm font-outfit-bold text-text-primary mb-3 mt-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+            {t.recommendedTitle}
+          </Text>
+
           {feedRecipes.map((recipe) => (
             <TouchableOpacity
               key={recipe.id}

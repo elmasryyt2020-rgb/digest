@@ -1093,7 +1093,9 @@ export default function FoodSearchScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: mode === 'search' ? (isDark ? '#101412' : '#F8F9F8') : '#1A1E1C' }}>
-      <StatusBar style={mode === 'search' ? 'dark' : 'light'} />
+      <StatusBar 
+        style={mode === 'search' ? (isDark ? 'light' : 'dark') : 'light'} 
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
