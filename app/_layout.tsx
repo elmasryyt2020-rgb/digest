@@ -85,6 +85,7 @@ export default function RootLayout() {
         <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
           <Stack.Screen name="onboarding_results" options={{ headerShown: false, gestureEnabled: false }} />
           <Stack.Screen name="sign-up" options={{ headerShown: false }} />

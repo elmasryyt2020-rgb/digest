@@ -61,6 +61,11 @@ interface DetectedItemType {
   micros?: any;
 }
 
+interface ScannedIngredient extends DetectedItemType {
+  checked: boolean;
+}
+
+
 const translationDict: Record<string, string> = {
   egg: 'بيض',
   eggs: 'بيض',
@@ -128,6 +133,7 @@ const translationDict: Record<string, string> = {
 };
 
 const translateToArabic = (englishName: string): string => {
+  if (!englishName || typeof englishName !== 'string') return '';
   const words = englishName.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/);
   const translatedWords = words.map(word => translationDict[word] || word);
   const uniqueTranslated = translatedWords.filter((w, idx) => w && translatedWords.indexOf(w) === idx);
@@ -136,8 +142,10 @@ const translateToArabic = (englishName: string): string => {
 
 const mapUsdaNutrients = (nutrients: any[]) => {
   const findVal = (ids: number[]) => {
-    const nut = nutrients.find(n => ids.includes(n.nutrientId));
-    return nut ? parseFloat(nut.value) : 0;
+    if (!Array.isArray(nutrients)) return 0;
+    const nut = nutrients.find(n => n && ids.includes(n.nutrientId));
+    const val = nut ? parseFloat(nut.value) : 0;
+    return isNaN(val) ? 0 : val;
   };
 
   return {
@@ -196,6 +204,9 @@ export default function FoodSearchScreen() {
   const [cameraState, setCameraState] = useState<'idle' | 'scanning' | 'detected' | 'error'>('idle');
   const [cameraImage, setCameraImage] = useState<string | null>(null);
   const [detectedItems, setDetectedItems] = useState<DetectedItemType[]>([]);
+  const [scannedIngredients, setScannedIngredients] = useState<ScannedIngredient[]>([]);
+  const [customMealName, setCustomMealName] = useState('');
+  const [expandedIngredientId, setExpandedIngredientId] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   
@@ -220,7 +231,7 @@ export default function FoodSearchScreen() {
           protein_per_100g: Math.round((log.protein / factor) * 10) / 10,
           carbs_per_100g: Math.round((log.carbs / factor) * 10) / 10,
           fat_per_100g: Math.round((log.fat / factor) * 10) / 10,
-          source: log.food_id.startsWith('usda:') ? 'usda' : 'custom',
+          source: (log.food_id || '').startsWith('usda:') ? 'usda' : 'custom',
         });
       }
     }
@@ -228,6 +239,10 @@ export default function FoodSearchScreen() {
   }, [foodLogs]);
 
   const t = {
+    breakfast: isRtl ? 'إفطار' : 'Breakfast',
+    lunch: isRtl ? 'غداء' : 'Lunch',
+    dinner: isRtl ? 'عشاء' : 'Dinner',
+    snacks: isRtl ? 'سناك' : 'Snacks',
     searchPlaceholder: isRtl ? 'ابحث عن طعام باللغة العربية أو الإنجليزية...' : 'Search food in English or Arabic...',
     title: isRtl ? 'تسجيل الوجبة' : 'Log Meal',
     back: isRtl ? 'إلغاء' : 'Cancel',
@@ -319,11 +334,12 @@ export default function FoodSearchScreen() {
   const performSearch = async (query: string) => {
     setLoading(true);
     try {
+      const sanitized = query.replace(/[(),.]/g, '');
       // 1. Search local Supabase foods_cache first
       const { data, error } = await supabase
         .from('foods_cache')
         .select('*')
-        .or(`name_en.ilike.%${query}%,name_ar.ilike.%${query}%`)
+        .or(`name_en.ilike.%${sanitized}%,name_ar.ilike.%${sanitized}%`)
         .limit(20);
 
       if (error) throw error;
@@ -718,22 +734,28 @@ export default function FoodSearchScreen() {
         ? (data.detected_items as DetectedItemType[])
         : [];
 
+      const ingredients: ScannedIngredient[] = detected.map(item => ({
+        ...item,
+        checked: true,
+      }));
+      setScannedIngredients(ingredients);
+
+      const mealName = language === 'ar'
+        ? (data?.meal_name_ar || data?.meal_name_en || 'وجبة ممسوحة ضوئياً')
+        : (data?.meal_name_en || data?.meal_name_ar || 'Scanned Meal');
+      setCustomMealName(mealName);
+
       // 5. Render the compressed image as the overlay backdrop.
       setCameraImage(compressedUri);
       setDetectedItems(detected);
       setCameraState('detected');
-      if (detected.length > 0) {
-        setSelectedFood(detected[0]);
-        setWeight(detected[0].amount_g);
-      } else {
-        setSelectedFood(null);
-      }
+      setSelectedFood(null);
     } catch (err: any) {
       console.error('Vision scan failed:', err);
       setCameraError(err?.message ?? 'Scan failed');
       setCameraState('error');
     }
-  }, []);
+  }, [language]);
 
   // Live capture path: open the device camera and take a photo.
   const handleSnapPhoto = async () => {
@@ -771,11 +793,120 @@ export default function FoodSearchScreen() {
 
   const handleSelectOverlayTag = (item: DetectedItemType) => {
     Keyboard.dismiss();
-    if (selectedFood?.id === item.id) {
-      setSelectedFood(null);
-    } else {
-      setSelectedFood(item);
-      setWeight(item.amount_g);
+    const scanned = scannedIngredients.find(ing => ing.id === item.id);
+    if (scanned) {
+      setExpandedIngredientId(prev => prev === item.id ? null : item.id);
+      if (!scanned.checked) {
+        setScannedIngredients(prev => prev.map(ing => ing.id === item.id ? { ...ing, checked: true } : ing));
+      }
+    }
+  };
+
+  const getCombinedTotals = () => {
+    const totals = {
+      amount_g: 0,
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      fiber_g: 0,
+      sugar_g: 0,
+      sodium_mg: 0,
+      potassium_mg: 0,
+      calcium_mg: 0,
+      iron_mg: 0,
+      vitamin_a_mcg: 0,
+      vitamin_c_mg: 0,
+    };
+
+    scannedIngredients.forEach((item) => {
+      if (!item.checked) return;
+      const factor = item.amount_g / 100;
+      totals.amount_g += item.amount_g;
+      totals.calories += item.calories_per_100g * factor;
+      totals.protein += item.protein_per_100g * factor;
+      totals.carbs += item.carbs_per_100g * factor;
+      totals.fat += item.fat_per_100g * factor;
+
+      const micros = item.micros || {};
+      const getVal = (key: string) => {
+        if (micros[key] !== undefined && micros[key] !== null) return parseFloat(micros[key]) || 0;
+        const baseKey = key.replace(/_(mg|mcg|g)$/, '');
+        if (micros[baseKey] !== undefined && micros[baseKey] !== null) return parseFloat(micros[baseKey]) || 0;
+        return 0;
+      };
+
+      totals.fiber_g += getVal('fiber_g') * factor;
+      totals.sugar_g += getVal('sugar_g') * factor;
+      totals.sodium_mg += getVal('sodium_mg') * factor;
+      totals.potassium_mg += getVal('potassium_mg') * factor;
+      totals.calcium_mg += getVal('calcium_mg') * factor;
+      totals.iron_mg += getVal('iron_mg') * factor;
+      totals.vitamin_a_mcg += getVal('vitamin_a_mcg') * factor;
+      totals.vitamin_c_mg += getVal('vitamin_c_mg') * factor;
+    });
+
+    return totals;
+  };
+
+  const handleLogCombinedMeal = async () => {
+    const totals = getCombinedTotals();
+    if (totals.amount_g === 0) {
+      Alert.alert(
+        isRtl ? 'تنبيه' : 'Alert',
+        isRtl ? 'يرجى اختيار مكون واحد على الأقل لتسجيل الوجبة.' : 'Please select at least one ingredient to log the meal.'
+      );
+      return;
+    }
+
+    const mealId = `scanned:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const factor = 100 / totals.amount_g;
+
+    const normalized = {
+      id: mealId,
+      name_en: customMealName || 'Scanned Meal',
+      name_ar: customMealName || 'Scanned Meal',
+      brand: null,
+      barcode: null,
+      source: 'scanned',
+      calories_per_100g: totals.calories * factor,
+      protein_per_100g: totals.protein * factor,
+      carbs_per_100g: totals.carbs * factor,
+      fat_per_100g: totals.fat * factor,
+      micros: {
+        fiber_g: totals.fiber_g * factor,
+        sugar_g: totals.sugar_g * factor,
+        sodium_mg: totals.sodium_mg * factor,
+        potassium_mg: totals.potassium_mg * factor,
+        calcium_mg: totals.calcium_mg * factor,
+        iron_mg: totals.iron_mg * factor,
+        vitamin_a_mcg: totals.vitamin_a_mcg * factor,
+        vitamin_c_mg: totals.vitamin_c_mg * factor,
+      }
+    };
+
+    // Ingest/cache this food item to Supabase first
+    try {
+      await supabase.from('foods_cache').upsert(normalized, { onConflict: 'id', ignoreDuplicates: true } as any);
+    } catch (e) {
+      console.error('Failed to pre-cache combined food:', e);
+    }
+
+    const logSuccess = addFoodLog({
+      food_id: mealId,
+      name_en: customMealName || 'Scanned Meal',
+      name_ar: customMealName || 'Scanned Meal',
+      meal_type: mealType,
+      amount_g: totals.amount_g,
+      calories: Math.round(totals.calories),
+      protein: Math.round(totals.protein * 10) / 10,
+      carbs: Math.round(totals.carbs * 10) / 10,
+      fat: Math.round(totals.fat * 10) / 10,
+      logged_date: new Date().toISOString().split('T')[0],
+    });
+
+    if (logSuccess) {
+      router.back();
     }
   };
 
@@ -1166,7 +1297,7 @@ export default function FoodSearchScreen() {
                   <TextInput
                     value={manualBarcode}
                     onChangeText={setManualBarcode}
-                    placeholder={isRtl ? 'اتب الباركود هنا (مثال: 6223000100412)' : 'Type barcode here (e.g., 6223000100412)'}
+                    placeholder={isRtl ? 'اكتب الباركود هنا (مثال: 6223000100412)' : 'Type barcode here (e.g., 6223000100412)'}
                     keyboardType="number-pad"
                     style={{ height: 42 }}
                     className="w-full bg-[#F3F6F3] dark:bg-border-muted border border-border-muted rounded-xl px-4 text-text-primary text-xs mb-3 text-center"
@@ -1289,10 +1420,12 @@ export default function FoodSearchScreen() {
                   )}
                   <PresstoButton
                     onPress={handlePickFromGallery}
-                    className="bg-white/10 rounded-2xl py-3.5 px-6 flex-row items-center"
+                    className="bg-white/10 rounded-2xl py-3.5 px-6"
                   >
-                    <Ionicons name="images-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                    <Text className="text-white font-outfit-bold text-sm">{t.cameraGallery}</Text>
+                    <View className="flex-row items-center justify-center">
+                      <Ionicons name="images-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                      <Text className="text-white font-outfit-bold text-sm">{t.cameraGallery}</Text>
+                    </View>
                   </PresstoButton>
                 </View>
 
@@ -1347,7 +1480,9 @@ export default function FoodSearchScreen() {
                   {detectedItems.map((item, index) => {
                     const leftPercent = `${item.anchor_point[0]}%`;
                     const topPercent = `${item.anchor_point[1]}%`;
-                    const isSelected = selectedFood?.id === item.id;
+                    const ing = scannedIngredients.find(i => i.id === item.id);
+                    const isChecked = ing ? ing.checked : false;
+                    const isExpanded = expandedIngredientId === item.id;
 
                     return (
                       <PresstoButton
@@ -1362,10 +1497,10 @@ export default function FoodSearchScreen() {
                       >
                         <View className="w-[2] h-5 bg-white" />
                         <View className={`w-2.5 h-2.5 rounded-full bg-bg-card border-2 ${
-                          isSelected ? 'border-nutrient-calories' : 'border-accent-sage'
+                          isExpanded ? 'border-nutrient-calories' : (isChecked ? 'border-accent-sage' : 'border-border-muted')
                         }`} />
                         <View className={`px-2.5 py-1.5 rounded-xl mt-1 shadow ${
-                          isSelected ? 'bg-accent-sage' : 'bg-[#1A1E1C]/85'
+                          isExpanded ? 'bg-accent-sage' : (isChecked ? 'bg-[#1A1E1C]/85' : 'bg-[#1A1E1C]/50 line-through')
                         }`}>
                           <Text className="text-white text-[10px] font-inter-semibold">
                             {isRtl ? item.name_ar : item.name_en} ({item.amount_g}g)
@@ -1396,15 +1531,204 @@ export default function FoodSearchScreen() {
                   )}
                 </View>
 
-                {/* Slider adjustment bottom box */}
-                <View className="bg-bg-base rounded-t-[32] p-5 border border-border-muted pb-8">
+                {/* Scrollable list/controls bottom box */}
+                <View className="bg-bg-base rounded-t-[32] p-5 border border-border-muted pb-8" style={{ height: 400 }}>
                   <View className="flex-row justify-center items-center mb-3">
                     <Ionicons name="sparkles" size={18} color={isDark ? '#5C856C' : '#4C6E58'} style={{ marginRight: 6 }} />
                     <Text className="text-sm font-outfit-bold text-text-primary">
                       {t.cameraSuccess}
                     </Text>
                   </View>
-                  {selectedFood && renderNutrientPreview()}
+
+                  <ScrollView showsVerticalScrollIndicator={false} className="flex-1">
+                    {/* Editable customMealName text input */}
+                    <View className="mb-4">
+                      <Text className={`text-[11px] font-outfit-semibold text-text-muted mb-1.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                        {isRtl ? 'اسم الوجبة' : 'Meal Name'}
+                      </Text>
+                      <TextInput
+                        value={customMealName}
+                        onChangeText={setCustomMealName}
+                        style={{
+                          fontFamily: 'Outfit-Bold',
+                          fontSize: 15,
+                          color: isDark ? '#E5EAE5' : '#1A1E1C',
+                          textAlign: isRtl ? 'right' : 'left',
+                          paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+                        }}
+                        className="bg-[#EAECEB] dark:bg-border-muted rounded-xl px-4 text-text-primary border border-border-muted"
+                        placeholder={isRtl ? 'اسم الوجبة' : 'Meal name'}
+                        placeholderTextColor="#9CA19E"
+                      />
+                    </View>
+
+                    {/* Scrollable Checklist of detected ingredients */}
+                    <View className="mb-4">
+                      <Text className={`text-[11px] font-outfit-semibold text-text-muted mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                        {isRtl ? 'المكونات المكتشفة' : 'Detected Ingredients'}
+                      </Text>
+                      {scannedIngredients.map((item) => {
+                        const isExpanded = expandedIngredientId === item.id;
+                        const displayName = isRtl ? item.name_ar : item.name_en;
+                        return (
+                          <View key={item.id} className="mb-2 bg-bg-card border border-border-muted rounded-2xl overflow-hidden shadow-sm">
+                            {/* Main row containing flat non-nested touchables */}
+                            <View className={`flex-row items-center justify-between p-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                              {/* Left side: Checkbox + Name as one touchable area */}
+                              <TouchableOpacity 
+                                onPress={() => {
+                                  setScannedIngredients(prev => prev.map(ing => 
+                                    ing.id === item.id ? { ...ing, checked: !ing.checked } : ing
+                                  ));
+                                }}
+                                activeOpacity={0.7}
+                                className={`flex-row items-center flex-1 ${isRtl ? 'flex-row-reverse' : ''}`}
+                              >
+                                <View className="p-1">
+                                  <Ionicons 
+                                    name={item.checked ? "checkbox" : "square-outline"} 
+                                    size={22} 
+                                    color={item.checked ? (isDark ? '#5C856C' : '#4C6E58') : (isDark ? '#8A9690' : '#626A66')} 
+                                  />
+                                </View>
+                                <Text className={`text-xs font-outfit-bold text-text-primary ml-2 mr-2 ${!item.checked ? 'text-text-muted line-through' : ''}`}>
+                                  {displayName}
+                                </Text>
+                              </TouchableOpacity>
+
+                              {/* Right side: Weight & Chevron as expand/collapse touchable area */}
+                              <TouchableOpacity 
+                                onPress={() => setExpandedIngredientId(isExpanded ? null : item.id)}
+                                activeOpacity={0.7}
+                                className={`flex-row items-center px-3 py-1.5 rounded-xl bg-[#EAECEB] dark:bg-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}
+                              >
+                                <Text className="text-xs font-inter-semibold text-text-muted mr-1.5 ml-1.5">
+                                  {item.amount_g}g
+                                </Text>
+                                <Ionicons 
+                                  name={isExpanded ? "chevron-up" : "chevron-down"} 
+                                  size={16} 
+                                  color={isDark ? '#8A9690' : '#626A66'} 
+                                />
+                              </TouchableOpacity>
+                            </View>
+
+                            {/* Inline weight adjuster */}
+                            {isExpanded && (
+                              <View className={`bg-bg-base border-t border-border-muted p-3 flex-row items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                <Text className="text-[10px] font-outfit-semibold text-text-muted">
+                                  {isRtl ? 'تعديل الوزن:' : 'Adjust Weight:'}
+                                </Text>
+                                <View className={`flex-row items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                                  <TouchableOpacity 
+                                    onPress={() => {
+                                      setScannedIngredients(prev => prev.map(ing => 
+                                        ing.id === item.id ? { ...ing, amount_g: Math.max(10, ing.amount_g - 25) } : ing
+                                      ));
+                                    }}
+                                    className="w-8 h-8 rounded-lg bg-[#EAECEB] dark:bg-border-muted justify-center items-center"
+                                  >
+                                    <Text className="text-base font-outfit-bold text-text-primary">-</Text>
+                                  </TouchableOpacity>
+                                  <View className="bg-bg-card border border-border-muted rounded-lg mx-2 flex-row justify-center items-center px-2 py-0.5">
+                                    <TextInput
+                                      keyboardType="numeric"
+                                      value={String(item.amount_g)}
+                                      onChangeText={(text) => {
+                                        const parsed = parseInt(text.replace(/[^0-9]/g, ''), 10);
+                                        setScannedIngredients(prev => prev.map(ing => 
+                                          ing.id === item.id ? { ...ing, amount_g: isNaN(parsed) ? 0 : Math.min(1000, parsed) } : ing
+                                        ));
+                                      }}
+                                      style={{
+                                        fontFamily: 'Outfit-Bold',
+                                        fontSize: 13,
+                                        color: isDark ? '#E5EAE5' : '#1A1E1C',
+                                        textAlign: 'center',
+                                        minWidth: 35,
+                                        paddingVertical: 2,
+                                      }}
+                                      placeholder="0"
+                                      placeholderTextColor="#9CA19E"
+                                      returnKeyType="done"
+                                      onSubmitEditing={Keyboard.dismiss}
+                                    />
+                                    <Text className="text-[11px] font-outfit-bold text-text-muted ml-0.5">g</Text>
+                                  </View>
+                                  <TouchableOpacity 
+                                    onPress={() => {
+                                      setScannedIngredients(prev => prev.map(ing => 
+                                        ing.id === item.id ? { ...ing, amount_g: Math.min(1000, ing.amount_g + 25) } : ing
+                                      ));
+                                    }}
+                                    className="w-8 h-8 rounded-lg bg-[#EAECEB] dark:bg-border-muted justify-center items-center"
+                                  >
+                                    <Text className="text-base font-outfit-bold text-text-primary">+</Text>
+                                  </TouchableOpacity>
+                                </View>
+                              </View>
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    {/* Live Bento box cards of total checked ingredients */}
+                    {(() => {
+                      const totals = getCombinedTotals();
+                      return (
+                        <View className="mb-4 bg-bg-card border border-border-muted p-4 rounded-3xl shadow-md">
+                          <Text className={`text-[11px] font-outfit-semibold text-text-muted mb-2.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                            {isRtl ? 'القيمة الغذائية الإجمالية' : 'Total Nutrition Summary'}
+                          </Text>
+                          <View className={`flex-row justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+                            <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
+                              <Text className="text-nutrient-calories font-outfit-bold text-base">
+                                {Math.round(totals.calories)}
+                              </Text>
+                              <Text className="text-[9px] font-inter-bold text-text-muted uppercase">
+                                {t.kcal}
+                              </Text>
+                            </View>
+                            <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
+                              <Text className="text-[#7E9DB0] font-outfit-bold text-base">
+                                {Math.round(totals.protein * 10) / 10}g
+                              </Text>
+                              <Text className="text-[9px] font-inter-bold text-text-muted uppercase">
+                                {t.protein}
+                              </Text>
+                            </View>
+                            <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
+                              <Text className="text-[#D3B177] font-outfit-bold text-base">
+                                {Math.round(totals.carbs * 10) / 10}g
+                              </Text>
+                              <Text className="text-[9px] font-inter-bold text-text-muted uppercase">
+                                {t.carbs}
+                              </Text>
+                            </View>
+                            <View className="flex-1 items-center bg-bg-base py-2 rounded-xl mx-1 border border-border-muted">
+                              <Text className="text-[#9CA19E] font-outfit-bold text-base">
+                                {Math.round(totals.fat * 10) / 10}g
+                              </Text>
+                              <Text className="text-[9px] font-inter-bold text-text-muted uppercase">
+                                {t.fats}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })()}
+
+                    {/* Single primary action button */}
+                    <PresstoButton 
+                      onPress={handleLogCombinedMeal} 
+                      className="bg-accent-sage rounded-2xl py-3.5 items-center justify-center mt-2"
+                    >
+                      <Text className="text-white font-outfit-bold text-sm">
+                        {isRtl ? '+ تسجيل الوجبة في المفكرة' : '+ Log Meal to Diary'}
+                      </Text>
+                    </PresstoButton>
+                  </ScrollView>
                 </View>
               </View>
             )}

@@ -106,7 +106,7 @@ interface DiaryState {
   incrementRecipesCount: () => boolean; // Returns true if allowed, false if blocked by trial
   setSignUpModalOpen: (open: boolean) => void;
   triggerSignUp: () => void;
-  addGeneratedRecipe: (recipe: RecipeType) => void;
+  addGeneratedRecipe: (recipe: RecipeType) => RecipeType;
   syncToSupabase: (userId: string) => Promise<void>;
   fetchFromSupabase: (userId: string) => Promise<void>;
   resetAll: () => void;
@@ -560,6 +560,8 @@ export const useDiaryStore = create<DiaryState>()(
             console.error('Error syncing added recipe to Supabase:', err);
           }
         })();
+
+        return updatedRecipe;
       },
 
       syncToSupabase: async (userId) => {

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Modal,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
@@ -16,6 +17,80 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { localRecipes } from '@/data/localRecipes';
 import { PresstoButton } from '@/components/PresstoButton';
+
+function getFallbackImage(title?: string, category?: string): string {
+  const t = (title || '').toLowerCase();
+  const cat = (category || '').toLowerCase();
+
+  if (t.includes('salad') || t.includes('caesar') || t.includes('greens') || t.includes('سلطة')) {
+    return 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('soup') || t.includes('broth') || t.includes('adas') || t.includes('molokhia') || t.includes('شوربة') || t.includes('ملوخية') || t.includes('حساء')) {
+    return 'https://images.unsplash.com/photo-1547592165-e1d17ffd26a0?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('chicken') || t.includes('meat') || t.includes('kofta') || t.includes('lamb') || t.includes('steak') || t.includes('دجاج') || t.includes('كفتة') || t.includes('لحم')) {
+    return 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('fish') || t.includes('salmon') || t.includes('seafood') || t.includes('سلمون') || t.includes('سمك')) {
+    return 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('breakfast') || t.includes('egg') || t.includes('shakshuka') || t.includes('toast') || t.includes('فطور') || t.includes('بيض') || t.includes('فول') || t.includes('شكشوكة') || cat === 'breakfast') {
+    return 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('apple') || t.includes('berry') || t.includes('berries') || t.includes('fruit') || t.includes('snack') || t.includes('تفاح') || t.includes('توت') || t.includes('سناك') || cat === 'snack') {
+    return 'https://images.unsplash.com/photo-1619546813926-a78fa6372cd2?auto=format&fit=crop&w=600&q=80';
+  }
+  return 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80';
+}
+
+function RecipeImage({ 
+  uri, 
+  title, 
+  category, 
+  heightClass = 'h-56' 
+}: { 
+  uri?: string; 
+  title?: string; 
+  category?: string; 
+  heightClass?: string 
+}) {
+  const [currentUri, setCurrentUri] = useState(uri || getFallbackImage(title, category));
+  const [loading, setLoading] = useState(true);
+  const [fallbackMode, setFallbackMode] = useState(!uri);
+
+  React.useEffect(() => {
+    setCurrentUri(uri || getFallbackImage(title, category));
+    setFallbackMode(!uri);
+  }, [uri, title, category]);
+
+  const handleError = () => {
+    if (!fallbackMode) {
+      setFallbackMode(true);
+      setCurrentUri(getFallbackImage(title, category));
+    } else {
+      setCurrentUri('https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80');
+    }
+  };
+
+  return (
+    <View className={`w-full ${heightClass} bg-bg-card relative justify-center items-center overflow-hidden`}>
+      {/* Loading Indicator */}
+      {loading && (
+        <View className="absolute inset-0 bg-[#EAECEB] dark:bg-border-muted justify-center items-center">
+          <ActivityIndicator size="small" color="#4C6E58" />
+        </View>
+      )}
+
+      <Image
+        source={{ uri: currentUri }}
+        className={`w-full ${heightClass} resize-cover`}
+        onLoadStart={() => setLoading(true)}
+        onLoadEnd={() => setLoading(false)}
+        onError={handleError}
+      />
+    </View>
+  );
+}
 
 export default function RecipeDetailScreen() {
   const { colorScheme } = useColorScheme();
@@ -124,7 +199,12 @@ export default function RecipeDetailScreen() {
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         {/* Image banner */}
-        <Image source={{ uri: recipe.image_url }} className="w-full h-56 resize-cover" />
+        <RecipeImage 
+          uri={recipe.image_url} 
+          title={isRtl ? recipe.title_ar : recipe.title_en}
+          category={recipe.category}
+          heightClass="h-56" 
+        />
 
         <View className="p-5">
           {/* Title & Description */}

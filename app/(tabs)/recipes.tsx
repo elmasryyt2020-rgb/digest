@@ -120,6 +120,14 @@ export default function RecipesScreen() {
   // AI Generator states
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const blurTimeoutRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    };
+  }, []);
+
   // Recommendations feed based on country
   const feedRecipes = localRecipes.filter(
     (recipe) => recipe.country_origin === userCountry || recipe.country_origin === 'GLOBAL'
@@ -230,6 +238,9 @@ export default function RecipesScreen() {
           onPress={() => setActiveTab('recommend')}
           className="flex-1 py-2 rounded-xl items-center"
           style={activeTab === 'recommend' ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
+          accessibilityRole="button"
+          accessibilityLabel={t.recommend}
+          accessibilityState={{ selected: activeTab === 'recommend' }}
         >
           <Text className={`text-xs font-outfit-medium ${activeTab === 'recommend' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
             {t.recommend}
@@ -239,6 +250,9 @@ export default function RecipesScreen() {
           onPress={() => setActiveTab('pantry')}
           className="flex-1 py-2 rounded-xl items-center"
           style={activeTab === 'pantry' ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
+          accessibilityRole="button"
+          accessibilityLabel={t.pantry}
+          accessibilityState={{ selected: activeTab === 'pantry' }}
         >
           <Text className={`text-xs font-outfit-medium ${activeTab === 'pantry' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
             {t.pantry}
@@ -248,13 +262,19 @@ export default function RecipesScreen() {
 
       {activeTab === 'recommend' ? (
         /* Recommendations Feed */
-        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          contentContainerStyle={{ padding: 20, paddingBottom: 40 }} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {feedRecipes.map((recipe) => (
             <TouchableOpacity
               key={recipe.id}
               onPress={() => router.push(`/recipes/${recipe.id}` as any)}
               className="bg-bg-card rounded-3xl border border-border-muted mb-5 overflow-hidden shadow-sm animate-none"
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isRtl ? recipe.title_ar : recipe.title_en}
             >
               <RecipeImage 
                 uri={recipe.image_url} 
@@ -308,8 +328,14 @@ export default function RecipesScreen() {
               </Text>
             </View>
           ) : (
-            <View className="flex-1 justify-between" style={{ minHeight: 450 }}>
-              <ScrollView showsVerticalScrollIndicator={false}>
+            <View className="flex-1 justify-between">
+              <ScrollView 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{
+                  paddingBottom: showSuggestions && filteredSuggestions.length > 0 ? 250 : 40
+                }}
+              >
                 <Text className={`text-sm font-outfit-bold text-text-primary mb-3 ${isRtl ? 'text-right' : 'text-left'}`}>
                   {t.ingredientsTitle}
                 </Text>
@@ -326,6 +352,9 @@ export default function RecipesScreen() {
                         className={`flex-row items-center bg-bg-card border border-border-muted px-3 py-2 rounded-2xl mr-2 mb-2 ${
                           isSelected ? 'bg-accent-mint border-accent-sage' : ''
                         }`}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isSelected }}
+                        accessibilityLabel={name}
                       >
                         <Text className="mr-1 text-sm">{ing.icon}</Text>
                         <Text className={`text-xs font-inter-medium ${isSelected ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
@@ -337,69 +366,75 @@ export default function RecipesScreen() {
                 </View>
 
                 {/* Custom input */}
-                <View className={`flex-row items-center mt-2 relative ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <TextInput
-                    className={`flex-1 bg-bg-card border border-border-muted rounded-2xl px-4 py-3 font-inter-regular text-xs text-text-primary ${
-                      isRtl ? 'text-right' : 'text-left'
-                    }`}
-                    placeholder={t.addCustom}
-                    placeholderTextColor="#9CA19E"
-                    value={customIngredient}
-                    onChangeText={(text) => {
-                      setCustomIngredient(text);
-                      setSearchQuery(text);
-                      setShowSuggestions(text.trim().length > 0);
-                    }}
-                    onFocus={() => {
-                      if (customIngredient.trim().length > 0) {
-                        setShowSuggestions(true);
-                      }
-                    }}
-                    onBlur={() => {
-                      setTimeout(() => {
-                        setShowSuggestions(false);
-                      }, 200);
-                    }}
-                  />
+                <View className={`flex-row items-center mt-2 gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <View className="flex-1 relative">
+                    <TextInput
+                      className={`w-full bg-bg-card border border-border-muted rounded-2xl px-4 py-3 font-inter-regular text-xs text-text-primary ${
+                        isRtl ? 'text-right' : 'text-left'
+                      }`}
+                      placeholder={t.addCustom}
+                      placeholderTextColor="#9CA19E"
+                      value={customIngredient}
+                      onChangeText={(text) => {
+                        setCustomIngredient(text);
+                        setSearchQuery(text);
+                        setShowSuggestions(text.trim().length > 0);
+                      }}
+                      onFocus={() => {
+                        if (customIngredient.trim().length > 0) {
+                          setShowSuggestions(true);
+                        }
+                      }}
+                      onBlur={() => {
+                        blurTimeoutRef.current = setTimeout(() => {
+                          setShowSuggestions(false);
+                        }, 200);
+                      }}
+                      onSubmitEditing={handleAddCustomIngredient}
+                      returnKeyType="done"
+                    />
+
+                    {/* Suggestions Dropdown overlay */}
+                    {showSuggestions && filteredSuggestions.length > 0 && (
+                      <View className="absolute top-12 left-0 right-0 bg-bg-card border border-border-muted rounded-2xl shadow-lg z-50 overflow-hidden">
+                        {filteredSuggestions.map((item, index) => {
+                          const name = language === 'ar' ? item.name_ar : item.name_en;
+                          const subName = language === 'ar' ? item.name_en : item.name_ar;
+                          const isLast = index === filteredSuggestions.length - 1;
+                          return (
+                            <TouchableOpacity
+                              key={item.name_en}
+                              onPress={() => {
+                                handleToggleIngredient(name);
+                                setCustomIngredient('');
+                                setSearchQuery('');
+                                setShowSuggestions(false);
+                              }}
+                              accessibilityRole="button"
+                              accessibilityLabel={name}
+                              className={`flex-row items-center justify-between px-4 py-3 ${
+                                isLast ? '' : 'border-b border-border-muted'
+                              } active:bg-accent-mint`}
+                            >
+                              <View className="flex-row items-center">
+                                <Text className="text-sm mr-2">{item.icon}</Text>
+                                <Text className="text-xs font-inter-medium text-text-primary">{name}</Text>
+                              </View>
+                              <Text className="text-[10px] font-inter-regular text-text-muted">{subName}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
                   <TouchableOpacity 
                     onPress={handleAddCustomIngredient}
-                    className="w-11 h-11 rounded-2xl bg-accent-sage justify-center items-center ml-2"
+                    accessibilityRole="button"
+                    accessibilityLabel={isRtl ? 'إضافة مكون مخصص' : 'Add custom ingredient'}
+                    className="w-11 h-11 rounded-2xl bg-accent-sage justify-center items-center"
                   >
                     <Ionicons name="add" size={24} color="#FFFFFF" />
                   </TouchableOpacity>
-
-                  {/* Suggestions Dropdown overlay */}
-                  {showSuggestions && filteredSuggestions.length > 0 && (
-                    <View className={`absolute top-12 bg-bg-card border border-border-muted rounded-2xl shadow-lg z-50 overflow-hidden ${
-                      isRtl ? 'right-0 left-14' : 'left-0 right-14'
-                    }`}>
-                      {filteredSuggestions.map((item, index) => {
-                        const name = language === 'ar' ? item.name_ar : item.name_en;
-                        const subName = language === 'ar' ? item.name_en : item.name_ar;
-                        const isLast = index === filteredSuggestions.length - 1;
-                        return (
-                          <TouchableOpacity
-                            key={item.name_en}
-                            onPress={() => {
-                              handleToggleIngredient(name);
-                              setCustomIngredient('');
-                              setSearchQuery('');
-                              setShowSuggestions(false);
-                            }}
-                            className={`flex-row items-center justify-between px-4 py-3 ${
-                              isLast ? '' : 'border-b border-border-muted'
-                            } active:bg-accent-mint`}
-                          >
-                            <View className="flex-row items-center">
-                              <Text className="text-sm mr-2">{item.icon}</Text>
-                              <Text className="text-xs font-inter-medium text-text-primary">{name}</Text>
-                            </View>
-                            <Text className="text-[10px] font-inter-regular text-text-muted">{subName}</Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
                 </View>
               </ScrollView>
 
@@ -413,6 +448,8 @@ export default function RecipesScreen() {
                 <PresstoButton
                   onPress={handleGenerateRecipe}
                   disabled={selectedIngredients.length < 2}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.generateBtn}
                   className={`rounded-2xl py-4 items-center justify-center ${
                     selectedIngredients.length >= 2 ? 'bg-accent-sage' : 'bg-border-muted'
                   }`}

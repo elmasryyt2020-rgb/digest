@@ -21,10 +21,13 @@ Follow these strict rules:
 2. Estimate the weight of each component in grams based on standard portion sizing visible in the image.
 3. Translate names to both English ('name_en') and Arabic ('name_ar').
 4. Compute standard macro values per 100g.
-5. Return a raw JSON payload conforming to the schema. Do not write markdown tags or preambles.
+5. Identify the overall meal name and translate it to both English ('meal_name_en') and Arabic ('meal_name_ar').
+6. Return a raw JSON payload conforming to the schema. Do not write markdown tags or preambles.
 
 JSON Schema:
 {
+  "meal_name_en": "String - Overall English name of the meal (e.g. 'Beef Burger with Fries')",
+  "meal_name_ar": "String - Overall Arabic name of the meal (e.g. 'برجر لحم مع بطاطس')",
   "detected_items": [
     {
       "name_en": "String - English food name",
@@ -121,9 +124,15 @@ serve(async (req) => {
     const userId = user.id;
 
     // 2. Read + sanitize the image_path from the request body.
-    const { image_path } = await req.json();
+    let image_path = '';
+    try {
+      const body = await req.json();
+      image_path = body?.image_path;
+    } catch {
+      throw new Error('Malformed or empty request body');
+    }
     if (!image_path || typeof image_path !== 'string') {
-      throw new Error('image_path is required');
+      throw new Error('image_path is required and must be a string');
     }
     // Path must be scoped to the caller's own uid to prevent cross-user reads.
     if (!image_path.startsWith(`${userId}/`)) {
@@ -182,16 +191,33 @@ serve(async (req) => {
     const cleaned = stripFences(rawText);
 
     let detected: DetectedItem[] = [];
+    let mealNameEn = '';
+    let mealNameAr = '';
     if (cleaned) {
       try {
         const parsed = JSON.parse(cleaned);
         if (Array.isArray(parsed?.detected_items)) {
-          detected = parsed.detected_items as DetectedItem[];
+          detected = parsed.detected_items.map((item: any) => {
+            const anchor = Array.isArray(item.anchor_point) && item.anchor_point.length === 2
+              ? [Number(item.anchor_point[0] ?? 0), Number(item.anchor_point[1] ?? 0)]
+              : [0, 0];
+
+            return {
+              name_en: String(item.name_en || 'Unknown Food'),
+              name_ar: String(item.name_ar || item.name_en || 'طعام غير معروف'),
+              amount_g: Number(item.amount_g ?? 0),
+              anchor_point: anchor as [number, number],
+              calories_per_100g: Number(item.calories_per_100g ?? 0),
+              protein_per_100g: Number(item.protein_per_100g ?? 0),
+              carbs_per_100g: Number(item.carbs_per_100g ?? 0),
+              fat_per_100g: Number(item.fat_per_100g ?? 0),
+            };
+          });
         }
+        mealNameEn = String(parsed?.meal_name_en || '');
+        mealNameAr = String(parsed?.meal_name_ar || '');
       } catch {
-        // If Gemini returned something unparseable, fall back to an empty list
-        // rather than crashing; the client renders an empty detected state.
-        console.warn('Could not parse Gemini detected_items JSON:', cleaned.slice(0, 200));
+        console.warn('Could not parse Gemini JSON:', cleaned.slice(0, 200));
       }
     }
 
@@ -250,7 +276,11 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ detected_items: enriched }), {
+    return new Response(JSON.stringify({
+      meal_name_en: mealNameEn,
+      meal_name_ar: mealNameAr,
+      detected_items: enriched,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error) {
