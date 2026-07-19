@@ -102,9 +102,12 @@ function OnboardShell({
   );
 }
 
+import { supabase } from '@/lib/supabase';
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const setProfile = useDiaryStore((state) => state.setProfile);
+  const setActiveMealPlan = useDiaryStore((state) => state.setActiveMealPlan);
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -145,52 +148,18 @@ export default function OnboardingScreen() {
     };
   }, [step]);
 
-  // Loading steps simulation & Auto-location check
+  // Loading steps simulation & AI meal plan generation
   useEffect(() => {
     if (step === 3) {
+      let isMounted = true;
       let currentProgress = 0;
-      const interval = setInterval(() => {
-        currentProgress += 0.05;
-        if (currentProgress >= 1) {
-          clearInterval(interval);
-          setLoadingProgress(1);
 
-          // Get system locale to mock Country priority detection
-          const locales = Localization.getLocales();
-          const regionCode = locales[0]?.regionCode;
-          const detectedCountry = (regionCode === 'EG' || regionCode === 'GB' ? regionCode : 'EG') as 'EG' | 'GB';
-
-          const currentYear = new Date().getFullYear();
-          const ageVal = currentYear - (parseInt(birthYear) || 28);
-          const weightVal = parseFloat(weight) || 75;
-          const heightVal = parseFloat(height) || 175;
-
-          const baseProfile = {
-            name: 'Guest',
-            gender,
-            age: ageVal,
-            weight_kg: weightVal,
-            height_cm: heightVal,
-            activity_level: activity,
-            health_goal: goal,
-            language: 'en' as const, // default English for funnel screen
-            country: detectedCountry,
-            onboarded: false, // will set to true on Supabase Signup completion
-            diet_type: dietType,
-            exclusions: exclusions,
-            disliked_ingredients: [],
-          };
-
-          const targets = calculateNutrientTargets(baseProfile);
-          setProfile({
-            ...baseProfile,
-            ...targets,
-          });
-
-          // Transition to onboarding results
-          router.replace('/onboarding_results');
-        } else {
-          setLoadingProgress(currentProgress);
+      // Animate progress bar up to 90% slowly while API processes
+      const progressInterval = setInterval(() => {
+        if (!isMounted) return;
+        if (currentProgress < 0.90) {
+          currentProgress += 0.05;
+          setLoadingProgress(Math.min(currentProgress, 0.90));
           if (currentProgress < 0.35) {
             setLoadingText('Analyzing biometrics...');
           } else if (currentProgress < 0.70) {
@@ -201,7 +170,103 @@ export default function OnboardingScreen() {
         }
       }, 150);
 
-      return () => clearInterval(interval);
+      const generatePlan = async () => {
+        const locales = Localization.getLocales();
+        const regionCode = locales[0]?.regionCode;
+        const detectedCountry = (regionCode === 'EG' || regionCode === 'GB' ? regionCode : 'EG') as 'EG' | 'GB';
+
+        const currentYear = new Date().getFullYear();
+        const ageVal = currentYear - (parseInt(birthYear) || 28);
+        const weightVal = parseFloat(weight) || 75;
+        const heightVal = parseFloat(height) || 175;
+
+        const baseProfile = {
+          name: 'Guest',
+          gender,
+          age: ageVal,
+          weight_kg: weightVal,
+          height_cm: heightVal,
+          activity_level: activity,
+          health_goal: goal,
+          language: 'en' as const, // default English for funnel screen
+          country: detectedCountry,
+          onboarded: false,
+          diet_type: dietType,
+          exclusions: exclusions,
+          disliked_ingredients: [],
+        };
+
+        const targets = calculateNutrientTargets(baseProfile);
+
+        try {
+          const { data, error } = await supabase.functions.invoke('generate-meal-plan', {
+            body: {
+              gender,
+              age: ageVal,
+              weight_kg: weightVal,
+              height_cm: heightVal,
+              activity_level: activity,
+              health_goal: goal,
+              diet_type: dietType,
+              exclusions,
+              country: detectedCountry,
+            }
+          });
+
+          if (error || !data) {
+            throw new Error(error?.message || 'Failed to generate meal plan');
+          }
+
+          if (isMounted) {
+            clearInterval(progressInterval);
+            setLoadingProgress(1.0);
+            setLoadingText('Finalizing plan...');
+
+            setProfile({
+              ...baseProfile,
+              target_calories: data.target_calories || targets.target_calories,
+              target_protein_g: data.target_protein_g || targets.target_protein_g,
+              target_carbs_g: data.target_carbs_g || targets.target_carbs_g,
+              target_fat_g: data.target_fat_g || targets.target_fat_g,
+              target_water_ml: data.target_water_ml || targets.target_water_ml,
+            });
+
+            setActiveMealPlan({
+              title: 'My Custom Plan',
+              meals: data.meals,
+              grocery_list: data.grocery_list,
+            });
+
+            setTimeout(() => {
+              if (isMounted) router.replace('/onboarding_results');
+            }, 300);
+          }
+        } catch (err) {
+          console.error('Error generating AI meal plan, falling back to local recipes:', err);
+          if (isMounted) {
+            clearInterval(progressInterval);
+            setLoadingProgress(1.0);
+            setLoadingText('Applying standard plan...');
+
+            setProfile({
+              ...baseProfile,
+              ...targets,
+            });
+            setActiveMealPlan(null);
+
+            setTimeout(() => {
+              if (isMounted) router.replace('/onboarding_results');
+            }, 500);
+          }
+        }
+      };
+
+      generatePlan();
+
+      return () => {
+        isMounted = false;
+        clearInterval(progressInterval);
+      };
     }
   }, [step]);
 

@@ -5,6 +5,44 @@ import * as Localization from 'expo-localization';
 import { RecipeType } from '@/data/localRecipes';
 import { supabase } from '@/lib/supabase';
 
+export interface MealPlanMeal {
+  title_en: string;
+  title_ar: string;
+  description_en: string;
+  description_ar: string;
+  ingredients: {
+    name_en: string;
+    name_ar: string;
+    weight_g: number;
+    calories_per_100g?: number;
+    protein_per_100g?: number;
+    carbs_per_100g?: number;
+    fat_per_100g?: number;
+  }[];
+  steps_en: string[];
+  steps_ar: string[];
+  total_calories: number;
+  total_protein_g: number;
+  total_carbs_g: number;
+  total_fat_g: number;
+  tags: string[];
+  image_url: string;
+  category: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+}
+
+export interface MealPlan {
+  id?: string;
+  title: string;
+  meals: {
+    breakfast: MealPlanMeal;
+    lunch: MealPlanMeal;
+    dinner: MealPlanMeal;
+    snack: MealPlanMeal;
+  };
+  grocery_list: { name_en: string; name_ar: string; weight_g: number }[];
+  created_at?: string;
+}
+
 
 export interface UserProfile {
   name: string;
@@ -107,6 +145,8 @@ interface DiaryState {
   setSignUpModalOpen: (open: boolean) => void;
   triggerSignUp: () => void;
   addGeneratedRecipe: (recipe: RecipeType) => RecipeType;
+  activeMealPlan: MealPlan | null;
+  setActiveMealPlan: (plan: MealPlan | null) => void;
   syncToSupabase: (userId: string) => Promise<void>;
   fetchFromSupabase: (userId: string) => Promise<void>;
   resetAll: () => void;
@@ -214,6 +254,7 @@ export const useDiaryStore = create<DiaryState>()(
       generatedRecipesCount: 0,
       isSignUpModalOpen: false,
       generatedRecipes: [],
+      activeMealPlan: null,
 
       initializeDefaultProfile: () => {
         if (get().profile) return;
@@ -564,6 +605,10 @@ export const useDiaryStore = create<DiaryState>()(
         return updatedRecipe;
       },
 
+      setActiveMealPlan: (plan) => {
+        set({ activeMealPlan: plan });
+      },
+
       syncToSupabase: async (userId) => {
         const profile = get().profile;
         if (!profile) return;
@@ -637,6 +682,40 @@ export const useDiaryStore = create<DiaryState>()(
         if (profileErr) {
           console.error('Error syncing profile:', profileErr.message);
           return;
+        }
+
+        // Sync Active Meal Plan if exists
+        try {
+          const activeMealPlan = get().activeMealPlan;
+          if (activeMealPlan) {
+            // Query if a meal plan already exists for this user to reuse its ID
+            const { data: existingPlans } = await supabase
+              .from('meal_plans')
+              .select('id')
+              .eq('user_id', userId)
+              .limit(1);
+            
+            const planId = existingPlans?.[0]?.id || activeMealPlan.id || undefined;
+
+            const { data: upsertedData, error: upsertErr } = await supabase.from('meal_plans').upsert({
+              id: planId,
+              user_id: userId,
+              title: activeMealPlan.title || 'Daily Meal Plan',
+              plan_data: activeMealPlan.meals,
+              grocery_list: activeMealPlan.grocery_list,
+            }).select('id');
+
+            if (!upsertErr && upsertedData && upsertedData.length > 0) {
+              set({
+                activeMealPlan: {
+                  ...activeMealPlan,
+                  id: upsertedData[0].id,
+                }
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error syncing meal plan to Supabase:', err);
         }
 
         // Upsert Generated Recipes
@@ -879,12 +958,33 @@ export const useDiaryStore = create<DiaryState>()(
             }));
           }
 
+          // 6. Fetch Active Meal Plan
+          const { data: dbMealPlans } = await supabase
+            .from('meal_plans')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          let activeMealPlan = get().activeMealPlan;
+          if (dbMealPlans && dbMealPlans.length > 0) {
+            const plan = dbMealPlans[0];
+            activeMealPlan = {
+              id: plan.id,
+              title: plan.title,
+              meals: plan.plan_data as any,
+              grocery_list: plan.grocery_list as any,
+              created_at: plan.created_at,
+            };
+          }
+
           set({
             profile,
             foodLogs,
             waterLogs,
             workoutLogs,
             generatedRecipes,
+            activeMealPlan,
             isTrial: false,
           });
         } catch (err) {
@@ -902,6 +1002,7 @@ export const useDiaryStore = create<DiaryState>()(
           generatedRecipesCount: 0,
           isSignUpModalOpen: false,
           generatedRecipes: [],
+          activeMealPlan: null,
         });
         get().initializeDefaultProfile();
       },

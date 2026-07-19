@@ -14,6 +14,8 @@ import MealSwapBottomSheet from '@/components/MealSwapBottomSheet';
 export default function OnboardingResultsScreen() {
   const router = useRouter();
   const profile = useDiaryStore((state) => state.profile);
+  const activeMealPlan = useDiaryStore((state) => state.activeMealPlan);
+  const setActiveMealPlan = useDiaryStore((state) => state.setActiveMealPlan);
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -29,7 +31,7 @@ export default function OnboardingResultsScreen() {
   const dislikedIngredients = profile?.disliked_ingredients || [];
 
   // Selected meals for the 4 slots
-  const [selectedMeals, setSelectedMeals] = useState<Record<string, RecipeType>>({});
+  const [selectedMeals, setSelectedMeals] = useState<Record<string, any>>({});
   
   // Swap Sheet state
   const [swapVisible, setSwapVisible] = useState(false);
@@ -37,6 +39,11 @@ export default function OnboardingResultsScreen() {
 
   // Load initial 4 meals matching preferences
   useEffect(() => {
+    if (activeMealPlan && activeMealPlan.meals) {
+      setSelectedMeals(activeMealPlan.meals);
+      return;
+    }
+
     const categories = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
     const initialSelected: Record<string, RecipeType> = {};
     
@@ -96,7 +103,7 @@ export default function OnboardingResultsScreen() {
     });
 
     setSelectedMeals(initialSelected);
-  }, [country, dietType, exclusions, dislikedIngredients]);
+  }, [country, dietType, exclusions, dislikedIngredients, activeMealPlan]);
 
   const handleOpenSwap = (category: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
     setActiveCategory(category);
@@ -104,10 +111,24 @@ export default function OnboardingResultsScreen() {
   };
 
   const handleSelectMeal = (recipe: RecipeType) => {
-    setSelectedMeals((prev) => ({
-      ...prev,
-      [recipe.category]: recipe,
-    }));
+    setSelectedMeals((prev) => {
+      const updated = {
+        ...prev,
+        [recipe.category]: recipe,
+      };
+
+      if (activeMealPlan) {
+        setActiveMealPlan({
+          ...activeMealPlan,
+          meals: {
+            ...activeMealPlan.meals,
+            [recipe.category]: recipe as any,
+          }
+        });
+      }
+
+      return updated;
+    });
   };
 
   // SVG Chart data based on goal
@@ -270,7 +291,7 @@ export default function OnboardingResultsScreen() {
                 {/* Fake/Blurred content */}
                 <View className="opacity-15" pointerEvents="none">
                   <Text className="font-outfit-bold text-[10px] text-text-primary mb-1.5">Ingredients:</Text>
-                  {recipe.ingredients.map((ing, i) => (
+                  {recipe.ingredients.map((ing: any, i: number) => (
                     <Text key={i} className="font-inter text-[9px] text-text-muted mb-0.5">• {ing.weight_g}g {ing.name_en}</Text>
                   ))}
                   <Text className="font-outfit-bold text-[10px] text-text-primary mt-2 mb-1">Directions:</Text>

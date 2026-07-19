@@ -114,6 +114,8 @@ export default function RecipesScreen() {
   const generatedRecipes = useDiaryStore((state) => state.generatedRecipes);
   const triggerSignUp = useDiaryStore((state) => state.triggerSignUp);
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
+  const activeMealPlan = useDiaryStore((state) => state.activeMealPlan);
+  const addFoodLog = useDiaryStore((state) => state.addFoodLog);
   
   const language = profile?.language || 'ar';
   const isRtl = language === 'ar';
@@ -124,7 +126,7 @@ export default function RecipesScreen() {
   const [customIngredient, setCustomIngredient] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeTab, setActiveTab] = useState<'recommend' | 'pantry'>('recommend');
+  const [activeTab, setActiveTab] = useState<'recommend' | 'pantry' | 'plan'>('recommend');
   
   // AI Generator states
   const [isGenerating, setIsGenerating] = useState(false);
@@ -153,6 +155,7 @@ export default function RecipesScreen() {
     title: isRtl ? 'وصفات ذكية' : 'AI Recipes',
     recommend: isRtl ? 'وصفاتي' : 'My Recipes',
     pantry: isRtl ? 'محتويات الثلاجة' : 'Pantry search',
+    plan: isRtl ? 'خطة وجباتي' : 'My Plan',
     ingredientsTitle: isRtl ? 'اختر المكونات المتوفرة لديك:' : 'Select available ingredients:',
     addCustom: isRtl ? 'أضف مكوناً مخصصاً' : 'Add custom ingredient',
     generateBtn: isRtl ? 'ابتكر وصفة بالذكاء الاصطناعي' : 'Generate AI Recipe',
@@ -270,6 +273,18 @@ export default function RecipesScreen() {
         >
           <Text className={`text-xs font-outfit-medium ${activeTab === 'pantry' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
             {t.pantry}
+          </Text>
+        </PresstoButton>
+        <PresstoButton 
+          onPress={() => setActiveTab('plan')}
+          className="flex-1 py-2 rounded-xl items-center"
+          style={activeTab === 'plan' ? [styles.activeTab, { backgroundColor: isDark ? '#161B18' : '#FFFFFF' }] : null}
+          accessibilityRole="button"
+          accessibilityLabel={t.plan}
+          accessibilityState={{ selected: activeTab === 'plan' }}
+        >
+          <Text className={`text-xs font-outfit-medium ${activeTab === 'plan' ? 'text-text-primary font-outfit-bold' : 'text-text-muted'}`}>
+            {t.plan}
           </Text>
         </PresstoButton>
       </View>
@@ -422,7 +437,7 @@ export default function RecipesScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
-      ) : (
+      ) : activeTab === 'pantry' ? (
         /* Refrigerator Pantry inventory list builder */
         <View className="flex-1 p-5">
           {isGenerating ? (
@@ -590,6 +605,155 @@ export default function RecipesScreen() {
             </View>
           )}
         </View>
+      ) : (
+        /* Daily Meal Plan Tab */
+        <ScrollView 
+          contentContainerStyle={{ padding: 20, paddingBottom: 100 }} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {activeMealPlan && activeMealPlan.meals ? (
+            <View>
+              {/* Grocery List Summary Panel */}
+              {activeMealPlan.grocery_list && activeMealPlan.grocery_list.length > 0 && (
+                <View className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-6 shadow-sm">
+                  <View className={`flex-row items-center mb-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <Ionicons name="basket-outline" size={20} color={isDark ? '#5C856C' : '#4C6E58'} />
+                    <Text className={`font-outfit-bold text-sm text-text-primary ${isRtl ? 'mr-2' : 'ml-2'}`}>
+                      {isRtl ? 'قائمة البقالة الموحدة' : 'Unified Grocery List'}
+                    </Text>
+                  </View>
+                  <View className="flex-row flex-wrap gap-2">
+                    {activeMealPlan.grocery_list.map((item: any, idx: number) => (
+                      <View key={idx} className="bg-accent-mint px-3 py-1.5 rounded-full">
+                        <Text className="text-[11px] font-inter-semibold text-accent-sage">
+                          {item.weight_g}g {isRtl ? item.name_ar : item.name_en}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Meals list */}
+              {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((category) => {
+                const plannedMeal = activeMealPlan.meals[category];
+                if (!plannedMeal) return null;
+
+                const diaryMealType = category === 'snack' ? 'snacks' : category;
+
+                return (
+                  <View key={category} className="bg-bg-card rounded-3xl border border-border-muted p-5 mb-5 shadow-sm">
+                    {/* Meal Header */}
+                    <View className={`flex-row justify-between items-center mb-3.5 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <View className="bg-accent-mint px-3 py-1.5 rounded-full">
+                        <Text className="text-[10px] font-outfit-bold text-accent-sage uppercase">
+                          {isRtl ? (category === 'breakfast' ? 'الفطور' : category === 'lunch' ? 'الغداء' : category === 'dinner' ? 'العشاء' : 'وجبة خفيفة') : category}
+                        </Text>
+                      </View>
+                      <Text className="text-xs font-inter-bold text-nutrient-calories">
+                        🔥 {plannedMeal.total_calories} {t.kcal}
+                      </Text>
+                    </View>
+
+                    {/* Meal Title & Description */}
+                    <Text className={`font-outfit-bold text-lg text-text-primary mb-1.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                      {isRtl ? plannedMeal.title_ar : plannedMeal.title_en}
+                    </Text>
+                    <Text className={`font-inter text-xs text-text-muted mb-4 leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}>
+                      {isRtl ? plannedMeal.description_ar : plannedMeal.description_en}
+                    </Text>
+
+                    {/* Macros Grid */}
+                    <View className="flex-row gap-2 mb-4">
+                      <View className="flex-1 bg-[#7E9DB0]/10 py-2 rounded-xl items-center">
+                        <Text className="font-outfit-bold text-xs" style={{ color: isDark ? '#7E9DB0' : '#5D7E92' }}>{plannedMeal.total_protein_g}g</Text>
+                        <Text className="font-inter text-[9px] text-text-muted mt-0.5">{isRtl ? 'بروتين' : 'Protein'}</Text>
+                      </View>
+                      <View className="flex-1 bg-[#D3B177]/10 py-2 rounded-xl items-center">
+                        <Text className="font-outfit-bold text-xs" style={{ color: isDark ? '#D3B177' : '#A9894E' }}>{plannedMeal.total_carbs_g}g</Text>
+                        <Text className="font-inter text-[9px] text-text-muted mt-0.5">{isRtl ? 'كارب' : 'Carbs'}</Text>
+                      </View>
+                      <View className="flex-1 bg-[#9CA19E]/10 py-2 rounded-xl items-center">
+                        <Text className="font-outfit-bold text-xs" style={{ color: isDark ? '#9CA19E' : '#767B78' }}>{plannedMeal.total_fat_g}g</Text>
+                        <Text className="font-inter text-[9px] text-text-muted mt-0.5">{isRtl ? 'دهون' : 'Fats'}</Text>
+                      </View>
+                    </View>
+
+                    {/* Ingredients List */}
+                    <Text className={`font-outfit-bold text-xs text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                      {isRtl ? 'المكونات:' : 'Ingredients:'}
+                    </Text>
+                    <View className="mb-4">
+                      {plannedMeal.ingredients.map((ing: any, i: number) => (
+                        <Text key={i} className={`font-inter text-[11px] text-text-muted mb-1 leading-normal ${isRtl ? 'text-right' : 'text-left'}`}>
+                          • {ing.weight_g}g {isRtl ? ing.name_ar : ing.name_en}
+                        </Text>
+                      ))}
+                    </View>
+
+                    {/* Directions Steps */}
+                    <Text className={`font-outfit-bold text-xs text-text-primary mb-2 ${isRtl ? 'text-right' : 'text-left'}`}>
+                      {isRtl ? 'خطوات التحضير:' : 'Instructions:'}
+                    </Text>
+                    <View className="mb-5">
+                      {(isRtl ? plannedMeal.steps_ar : plannedMeal.steps_en).map((step: string, i: number) => (
+                        <Text key={i} className={`font-inter text-[11px] text-text-muted mb-2 leading-relaxed ${isRtl ? 'text-right' : 'text-left'}`}>
+                          {i + 1}. {step}
+                        </Text>
+                      ))}
+                    </View>
+
+                    {/* Add to Diary Action Button */}
+                    <TouchableOpacity
+                      onPress={() => {
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        const logged = addFoodLog({
+                          food_id: `custom:meal_plan_${category}_${Date.now()}`,
+                          name_en: plannedMeal.title_en,
+                          name_ar: plannedMeal.title_ar,
+                          meal_type: diaryMealType as any,
+                          amount_g: plannedMeal.ingredients.reduce((sum: number, i: any) => sum + (i.weight_g || 0), 0) || 300,
+                          calories: plannedMeal.total_calories,
+                          protein: plannedMeal.total_protein_g,
+                          carbs: plannedMeal.total_carbs_g,
+                          fat: plannedMeal.total_fat_g,
+                          logged_date: todayStr,
+                        });
+                        if (logged) {
+                          Alert.alert(
+                            isRtl ? 'تم التسجيل' : 'Logged',
+                            isRtl 
+                              ? `تم تسجيل ${plannedMeal.title_ar} بنجاح في سجلات الفود اليومية.` 
+                              : `Successfully logged ${plannedMeal.title_en} to your diary!`
+                          );
+                        }
+                      }}
+                      className="bg-accent-sage py-3.5 rounded-2xl flex-row justify-center items-center gap-2"
+                    >
+                      <Ionicons name="add-circle-outline" size={16} color="white" />
+                      <Text className="text-white font-outfit-bold text-xs">
+                        {isRtl ? 'سجل الوجبة في المفكرة اليومية' : 'Log Meal to Daily Diary'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View className="items-center py-12 px-6">
+              <Ionicons name="calendar-outline" size={48} color={isDark ? '#8A9690' : '#626A66'} className="mb-4" />
+              <Text className="font-outfit-bold text-base text-text-primary text-center mb-2">
+                {isRtl ? 'لا توجد خطة وجبات بعد' : 'No Daily Meal Plan Yet'}
+              </Text>
+              <Text className="font-inter text-xs text-text-muted text-center leading-relaxed">
+                {isRtl 
+                  ? 'يرجى إكمال الاستبيان التعريفي لحساب الأهداف وتوليد خطة الوجبات المخصصة بالذكاء الاصطناعي.'
+                  : 'Please complete the onboarding questionnaire to calculate targets and generate your custom AI meal plan.'}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
       )}
     </SafeAreaView>
   );
