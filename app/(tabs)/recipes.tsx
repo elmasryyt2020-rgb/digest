@@ -18,18 +18,83 @@ import { useColorScheme } from 'nativewind';
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { localRecipes, RecipeType } from '@/data/localRecipes';
 import { PresstoButton } from '@/components/PresstoButton';
+import { ingredientSuggestions, IngredientSuggestion } from '@/data/ingredients';
 
-const commonIngredients = [
-  { name_en: 'Chicken breast', name_ar: 'صدر دجاج', icon: '🍗' },
-  { name_en: 'Fava beans', name_ar: 'فول مدمس', icon: '🌱' },
-  { name_en: 'Zucchini', name_ar: 'كوسة', icon: '🥒' },
-  { name_en: 'Olive oil', name_ar: 'زيت زيتون', icon: '🫒' },
-  { name_en: 'Tomatoes', name_ar: 'طماطم', icon: '🍅' },
-  { name_en: 'Eggs', name_ar: 'بيض', icon: '🥚' },
-  { name_en: 'Potatoes', name_ar: 'بطاطس', icon: '🥔' },
-  { name_en: 'Lentils', name_ar: 'عدس', icon: '🥣' },
-  { name_en: 'Cheese', name_ar: 'جبنة', icon: '🧀' },
-];
+function getFallbackImage(title?: string, category?: string): string {
+  const t = (title || '').toLowerCase();
+  const cat = (category || '').toLowerCase();
+
+  if (t.includes('salad') || t.includes('caesar') || t.includes('greens') || t.includes('سلطة')) {
+    return 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('soup') || t.includes('broth') || t.includes('adas') || t.includes('molokhia') || t.includes('شوربة') || t.includes('ملوخية') || t.includes('حساء')) {
+    return 'https://images.unsplash.com/photo-1547592165-e1d17ffd26a0?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('chicken') || t.includes('meat') || t.includes('kofta') || t.includes('lamb') || t.includes('steak') || t.includes('دجاج') || t.includes('كفتة') || t.includes('لحم')) {
+    return 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('fish') || t.includes('salmon') || t.includes('seafood') || t.includes('سلمون') || t.includes('سمك')) {
+    return 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('breakfast') || t.includes('egg') || t.includes('shakshuka') || t.includes('toast') || t.includes('فطور') || t.includes('بيض') || t.includes('فول') || t.includes('شكشوكة') || cat === 'breakfast') {
+    return 'https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=600&q=80';
+  }
+  if (t.includes('apple') || t.includes('berry') || t.includes('berries') || t.includes('fruit') || t.includes('snack') || t.includes('تفاح') || t.includes('توت') || t.includes('سناك') || cat === 'snack') {
+    return 'https://images.unsplash.com/photo-1619546813926-a78fa6372cd2?auto=format&fit=crop&w=600&q=80';
+  }
+  return 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80';
+}
+
+function RecipeImage({ 
+  uri, 
+  title, 
+  category, 
+  heightClass = 'h-40' 
+}: { 
+  uri?: string; 
+  title?: string; 
+  category?: string; 
+  heightClass?: string 
+}) {
+  const [currentUri, setCurrentUri] = React.useState(uri || getFallbackImage(title, category));
+  const [loading, setLoading] = React.useState(true);
+  const [fallbackMode, setFallbackMode] = React.useState(!uri);
+
+  React.useEffect(() => {
+    setCurrentUri(uri || getFallbackImage(title, category));
+    setFallbackMode(!uri);
+  }, [uri, title, category]);
+
+  const handleError = () => {
+    if (!fallbackMode) {
+      setFallbackMode(true);
+      setCurrentUri(getFallbackImage(title, category));
+    } else {
+      setCurrentUri('https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80');
+    }
+  };
+
+  return (
+    <View className={`w-full ${heightClass} bg-bg-card relative justify-center items-center overflow-hidden`}>
+      {/* Loading Indicator */}
+      {loading && (
+        <View className="absolute inset-0 bg-[#EAECEB] dark:bg-border-muted justify-center items-center">
+          <ActivityIndicator size="small" color="#4C6E58" />
+        </View>
+      )}
+
+      <Image
+        source={{ uri: currentUri }}
+        className={`w-full ${heightClass} resize-cover`}
+        onLoadStart={() => setLoading(true)}
+        onLoadEnd={() => setLoading(false)}
+        onError={handleError}
+      />
+    </View>
+  );
+}
+
+const commonIngredients = ingredientSuggestions.slice(0, 9);
 
 export default function RecipesScreen() {
   const router = useRouter();
@@ -48,6 +113,8 @@ export default function RecipesScreen() {
   // Local UI State
   const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
   const [customIngredient, setCustomIngredient] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeTab, setActiveTab] = useState<'recommend' | 'pantry'>('recommend');
   
   // AI Generator states
@@ -57,6 +124,13 @@ export default function RecipesScreen() {
   const feedRecipes = localRecipes.filter(
     (recipe) => recipe.country_origin === userCountry || recipe.country_origin === 'GLOBAL'
   );
+
+  const filteredSuggestions = searchQuery.trim()
+    ? ingredientSuggestions.filter(item =>
+        item.name_en.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.name_ar.includes(searchQuery)
+      ).slice(0, 5)
+    : [];
 
   const t = {
     title: isRtl ? 'وصفات ذكية' : 'AI Recipes',
@@ -86,6 +160,8 @@ export default function RecipesScreen() {
       setSelectedIngredients([...selectedIngredients, item]);
     }
     setCustomIngredient('');
+    setSearchQuery('');
+    setShowSuggestions(false);
   };
 
   const handleGenerateRecipe = () => {
@@ -134,8 +210,8 @@ export default function RecipesScreen() {
       };
 
       // Add to store generated list and navigate to detail page
-      addGeneratedRecipe(mockGenerated);
-      router.push(`/recipes/${mockGenerated.id}` as any);
+      const generated = addGeneratedRecipe(mockGenerated);
+      router.push(`/recipes/${generated.id}` as any);
     }, 2000);
   };
 
@@ -174,12 +250,18 @@ export default function RecipesScreen() {
         /* Recommendations Feed */
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
           {feedRecipes.map((recipe) => (
-            <PresstoButton
+            <TouchableOpacity
               key={recipe.id}
               onPress={() => router.push(`/recipes/${recipe.id}` as any)}
-              className="bg-bg-card rounded-3xl border border-border-muted mb-5 overflow-hidden shadow-sm"
+              className="bg-bg-card rounded-3xl border border-border-muted mb-5 overflow-hidden shadow-sm animate-none"
+              activeOpacity={0.7}
             >
-              <Image source={{ uri: recipe.image_url }} className="w-full h-40 resize-cover" />
+              <RecipeImage 
+                uri={recipe.image_url} 
+                title={language === 'ar' ? recipe.title_ar : recipe.title_en}
+                category={recipe.category}
+                heightClass="h-40" 
+              />
               <View className="p-4">
                 {/* Tags row */}
                 <View className={`flex-row mb-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -211,7 +293,7 @@ export default function RecipesScreen() {
                   </Text>
                 </View>
               </View>
-            </PresstoButton>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       ) : (
@@ -255,7 +337,7 @@ export default function RecipesScreen() {
                 </View>
 
                 {/* Custom input */}
-                <View className={`flex-row items-center mt-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <View className={`flex-row items-center mt-2 relative ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <TextInput
                     className={`flex-1 bg-bg-card border border-border-muted rounded-2xl px-4 py-3 font-inter-regular text-xs text-text-primary ${
                       isRtl ? 'text-right' : 'text-left'
@@ -263,7 +345,21 @@ export default function RecipesScreen() {
                     placeholder={t.addCustom}
                     placeholderTextColor="#9CA19E"
                     value={customIngredient}
-                    onChangeText={setCustomIngredient}
+                    onChangeText={(text) => {
+                      setCustomIngredient(text);
+                      setSearchQuery(text);
+                      setShowSuggestions(text.trim().length > 0);
+                    }}
+                    onFocus={() => {
+                      if (customIngredient.trim().length > 0) {
+                        setShowSuggestions(true);
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowSuggestions(false);
+                      }, 200);
+                    }}
                   />
                   <TouchableOpacity 
                     onPress={handleAddCustomIngredient}
@@ -271,6 +367,39 @@ export default function RecipesScreen() {
                   >
                     <Ionicons name="add" size={24} color="#FFFFFF" />
                   </TouchableOpacity>
+
+                  {/* Suggestions Dropdown overlay */}
+                  {showSuggestions && filteredSuggestions.length > 0 && (
+                    <View className={`absolute top-12 bg-bg-card border border-border-muted rounded-2xl shadow-lg z-50 overflow-hidden ${
+                      isRtl ? 'right-0 left-14' : 'left-0 right-14'
+                    }`}>
+                      {filteredSuggestions.map((item, index) => {
+                        const name = language === 'ar' ? item.name_ar : item.name_en;
+                        const subName = language === 'ar' ? item.name_en : item.name_ar;
+                        const isLast = index === filteredSuggestions.length - 1;
+                        return (
+                          <TouchableOpacity
+                            key={item.name_en}
+                            onPress={() => {
+                              handleToggleIngredient(name);
+                              setCustomIngredient('');
+                              setSearchQuery('');
+                              setShowSuggestions(false);
+                            }}
+                            className={`flex-row items-center justify-between px-4 py-3 ${
+                              isLast ? '' : 'border-b border-border-muted'
+                            } active:bg-accent-mint`}
+                          >
+                            <View className="flex-row items-center">
+                              <Text className="text-sm mr-2">{item.icon}</Text>
+                              <Text className="text-xs font-inter-medium text-text-primary">{name}</Text>
+                            </View>
+                            <Text className="text-[10px] font-inter-regular text-text-muted">{subName}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               </ScrollView>
 
