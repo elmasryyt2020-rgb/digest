@@ -30,15 +30,20 @@ export interface MealPlanMeal {
   category: 'breakfast' | 'lunch' | 'dinner' | 'snack';
 }
 
+export interface WeeklyMeals {
+  sunday: { breakfast: MealPlanMeal; lunch: MealPlanMeal; dinner: MealPlanMeal; snack: MealPlanMeal };
+  monday: { breakfast: MealPlanMeal; lunch: MealPlanMeal; dinner: MealPlanMeal; snack: MealPlanMeal };
+  tuesday: { breakfast: MealPlanMeal; lunch: MealPlanMeal; dinner: MealPlanMeal; snack: MealPlanMeal };
+  wednesday: { breakfast: MealPlanMeal; lunch: MealPlanMeal; dinner: MealPlanMeal; snack: MealPlanMeal };
+  thursday: { breakfast: MealPlanMeal; lunch: MealPlanMeal; dinner: MealPlanMeal; snack: MealPlanMeal };
+  friday: { breakfast: MealPlanMeal; lunch: MealPlanMeal; dinner: MealPlanMeal; snack: MealPlanMeal };
+  saturday: { breakfast: MealPlanMeal; lunch: MealPlanMeal; dinner: MealPlanMeal; snack: MealPlanMeal };
+}
+
 export interface MealPlan {
   id?: string;
   title: string;
-  meals: {
-    breakfast: MealPlanMeal;
-    lunch: MealPlanMeal;
-    dinner: MealPlanMeal;
-    snack: MealPlanMeal;
-  };
+  meals: WeeklyMeals;
   grocery_list: { name_en: string; name_ar: string; weight_g: number }[];
   created_at?: string;
 }
@@ -87,6 +92,7 @@ export interface UserProfile {
 
   // App settings extension
   app_theme?: 'light' | 'dark' | 'system';
+  budget?: 'low' | 'medium' | 'high';
 }
 
 export interface FoodLogEntry {
@@ -282,6 +288,7 @@ export const useDiaryStore = create<DiaryState>()(
           diet_type: 'classic',
           exclusions: [],
           disliked_ingredients: [],
+          budget: 'medium',
           goal_weight_kg: 70,
           unit_weight: 'kg',
           unit_height: 'cm',
@@ -388,6 +395,7 @@ export const useDiaryStore = create<DiaryState>()(
                   macro_protein_pct: profile.macro_protein_pct || 30,
                   macro_fat_pct: profile.macro_fat_pct || 30,
                   app_theme: profile.app_theme || 'system',
+                  budget: profile.budget || 'medium',
                 });
               }
             }
@@ -677,6 +685,7 @@ export const useDiaryStore = create<DiaryState>()(
           macro_protein_pct: profile.macro_protein_pct || 30,
           macro_fat_pct: profile.macro_fat_pct || 30,
           app_theme: profile.app_theme || 'system',
+          budget: profile.budget || 'medium',
         });
 
         if (profileErr) {
@@ -847,6 +856,7 @@ export const useDiaryStore = create<DiaryState>()(
               macro_protein_pct: dbProfile.macro_protein_pct !== null ? parseInt(dbProfile.macro_protein_pct) : 30,
               macro_fat_pct: dbProfile.macro_fat_pct !== null ? parseInt(dbProfile.macro_fat_pct) : 30,
               app_theme: dbProfile.app_theme || 'system',
+              budget: dbProfile.budget || 'medium',
             };
           }
 
