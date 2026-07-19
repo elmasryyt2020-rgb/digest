@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
+import { useAuthStore } from '@/store/useAuthStore';
 import { localRecipes, RecipeType } from '@/data/localRecipes';
 import { PresstoButton } from '@/components/PresstoButton';
 import { supabase } from '@/lib/supabase';
@@ -107,6 +108,8 @@ export default function RecipesScreen() {
   const profile = useDiaryStore((state) => state.profile);
   const incrementRecipesCount = useDiaryStore((state) => state.incrementRecipesCount);
   const addGeneratedRecipe = useDiaryStore((state) => state.addGeneratedRecipe);
+  const triggerSignUp = useDiaryStore((state) => state.triggerSignUp);
+  const isSignedIn = useAuthStore((state) => state.isSignedIn);
   
   const language = profile?.language || 'ar';
   const isRtl = language === 'ar';
@@ -177,7 +180,13 @@ export default function RecipesScreen() {
   const handleGenerateRecipe = async () => {
     if (selectedIngredients.length < 2) return;
 
-    incrementRecipesCount();
+    if (!isSignedIn) {
+      triggerSignUp();
+      return;
+    }
+
+    const allowed = incrementRecipesCount();
+    if (!allowed) return;
 
     setIsGenerating(true);
     try {
