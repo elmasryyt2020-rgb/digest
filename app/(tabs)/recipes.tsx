@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Platform,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { useColorScheme } from 'nativewind';
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { localRecipes, RecipeType } from '@/data/localRecipes';
 import { PresstoButton } from '@/components/PresstoButton';
+import { supabase } from '@/lib/supabase';
 import { ingredientSuggestions, IngredientSuggestion } from '@/data/ingredients';
 
 function getFallbackImage(title?: string, category?: string): string {
@@ -172,55 +174,49 @@ export default function RecipesScreen() {
     setShowSuggestions(false);
   };
 
-  const handleGenerateRecipe = () => {
+  const handleGenerateRecipe = async () => {
     if (selectedIngredients.length < 2) return;
 
     incrementRecipesCount();
 
     setIsGenerating(true);
-    
-    // Simulate Gemini API response delay
-    setTimeout(() => {
-      setIsGenerating(false);
-      // Serve a generated recipe mockup
-      const mockGenerated: RecipeType = {
-        id: 'ai_zucchini_chicken',
-        title_en: 'AI Chicken & Zucchini Sauté',
-        title_ar: 'دجاج محمر مع الكوسة بالذكاء الاصطناعي',
-        description_en: 'A high-protein, nutrient-rich stir fry using chicken breast, fresh zucchini, tomatoes, and olive oil. Perfect clean eating meal.',
-        description_ar: 'طبق دجاج محمر غني بالبروتين مع الكوسة الطازجة، الطماطم المفرومة وزيت الزيتون. وجبة صحية ولذيذة تم ابتكارها بالذكاء الاصطناعي.',
-        ingredients: [
-          { name_en: 'Chicken breast', name_ar: 'صدر دجاج', weight_g: 150 },
-          { name_en: 'Zucchini', name_ar: 'كوسة طازجة', weight_g: 100 },
-          { name_en: 'Olive oil', name_ar: 'زيت زيتون', weight_g: 10 },
-          { name_en: 'Tomatoes', name_ar: 'طماطم مفرومة', weight_g: 80 },
-        ],
-        steps_en: [
-          'Slice the chicken breast into thin strips and season with salt and pepper.',
-          'Heat olive oil in a pan and sauté the chicken until fully cooked (about 6 minutes).',
-          'Add sliced zucchini and diced tomatoes to the pan. Cook for another 5 minutes.',
-          'Garnish with fresh herbs and serve hot.'
-        ],
-        steps_ar: [
-          'قطع صدر الدجاج إلى شرائح رفيعة وتبله بالملح والفلفل الأسود.',
-          'سخن زيت الزيتون في مقلاة وشوح الدجاج حتى تمام النضج (حوالي 6 دقائق).',
-          'أضف شرائح الكوسة والطماطم المفرومة إلى المقلاة واطه لمدة 5 دقائق إضافية.',
-          'زين الطبق بالأعشاب الطازجة وقدمه ساخناً.'
-        ],
-        total_calories: 320,
-        total_protein_g: 35,
-        total_carbs_g: 8,
-        total_fat_g: 14,
-        image_url: 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?auto=format&fit=crop&w=600&q=80',
-        country_origin: 'GLOBAL',
-        category: 'lunch',
-        tags: ['AI Generated', 'High Protein', 'Low Carb'],
-      };
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const { data, error } = await supabase.functions.invoke('generate-recipe', {
+        body: {
+          ingredients: selectedIngredients,
+          language,
+          country: userCountry,
+          health_goal: profile?.health_goal,
+          diet_type: profile?.diet_type,
+          exclusions: profile?.exclusions,
+        },
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+
+      if (error || !data) {
+        throw new Error(error?.message || 'Failed to generate recipe');
+      }
 
       // Add to store generated list and navigate to detail page
-      const generated = addGeneratedRecipe(mockGenerated);
+      const recipeToSave: RecipeType = {
+        ...data,
+        id: `ai_${Date.now()}`,
+      };
+
+      const generated = addGeneratedRecipe(recipeToSave);
       router.push(`/recipes/${generated.id}` as any);
-    }, 2000);
+    } catch (err) {
+      console.error('Error generating AI recipe:', err);
+      Alert.alert(
+        isRtl ? 'عذرًا، حدث خطأ' : 'Error',
+        isRtl ? 'حدث خطأ أثناء ابتكار الوصفة بالذكاء الاصطناعي. يرجى المحاولة مرة أخرى.' : 'Could not generate recipe. Please try again.'
+      );
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
