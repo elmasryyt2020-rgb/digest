@@ -147,8 +147,10 @@ export default function RecipesScreen() {
   const [activeDay, setActiveDay] = useState<string>(getTodayWeekday());
   const [updatingBudget, setUpdatingBudget] = useState(false);
 
+  // Look up the selected day's meal plan; fall back to null (not the entire
+  // WeeklyMeals object) so the empty state renders when the day is missing.
   const dayPlan = activeMealPlan?.meals ? (
-    (activeMealPlan.meals as any)[activeDay] || activeMealPlan.meals
+    (activeMealPlan.meals as Record<string, any>)[activeDay] ?? null
   ) : null;
 
   // AI Generator states
@@ -291,24 +293,52 @@ export default function RecipesScreen() {
 
       if (planError || !planData) throw new Error(planError?.message || 'Failed to update plan');
 
-      // Update profile
-      const updatedProfile = { ...profile, budget: level };
-      setProfile(updatedProfile);
-      setActiveMealPlan(planData);
+      // Update profile budget locally (store re-syncs targets only when core
+      // biometrics change; budget is an app-preference field).
+      setProfile({ ...(profile ?? {}), budget: level });
 
-      // sync profile to supabase
+      // setActiveMealPlan expects a MealPlan ({ title, meals, grocery_list }),
+      // NOT the raw Edge Function response (which also carries target_*).
+      // Without unwrapping here, activeMealPlan.meals becomes the whole
+      // response and activeDay's meals resolve to undefined -> empty state.
+      setActiveMealPlan({
+        title: 'My Custom Plan',
+        meals: planData.meals,
+        grocery_list: planData.grocery_list,
+      });
+
+      // Persist budget + new weekly plan to Supabase. NOTE: the table is
+      // `meal_plans` (columns: id, user_id, title, plan_data, grocery_list,
+      // created_at) — there is no `user_meal_plans` table in the schema.
       if (token && session?.user?.id) {
         await supabase.from('profiles').update({ budget: level }).eq('id', session.user.id);
-        await supabase.from('user_meal_plans').upsert({
+
+        // Reuse the user's existing meal_plans row if present so we update
+        // the active plan in place instead of stacking rows on every toggle.
+        const { data: existing } = await supabase
+          .from('meal_plans')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        await supabase.from('meal_plans').upsert({
+          id: existing?.[0]?.id,
           user_id: session.user.id,
-          plan_data: planData,
-          updated_at: new Date().toISOString()
+          title: 'My Custom Plan',
+          plan_data: planData.meals,
+          grocery_list: planData.grocery_list,
         });
       }
 
+      const budgetLabel = isRtl
+        ? level === 'low' ? 'اقتصادية' : level === 'medium' ? 'متوسطة' : 'مرتفعة'
+        : level.charAt(0).toUpperCase() + level.slice(1);
       Alert.alert(
         isRtl ? 'تم تحديث الميزانية' : 'Budget Updated',
-        isRtl ? 'تم تحديث خطة الوجبات الخاصة بك.' : 'Your meal plan has been updated.'
+        isRtl
+          ? `تم تحديث خطة الوجبات بنجاح إلى المستوى ${budgetLabel}!`
+          : `Meal plan successfully updated to ${level} budget!`
       );
     } catch (error) {
       console.error(error);
@@ -697,7 +727,9 @@ export default function RecipesScreen() {
             </Text>
             <View className={`flex-row bg-[#EAECEB] dark:bg-border-muted p-1 rounded-2xl ${isRtl ? 'flex-row-reverse' : ''}`}>
               {(['low', 'medium', 'high'] as const).map((level) => {
-                const isSelected = profile?.budget === level || (!profile?.budget && level === 'low');
+                // Store default for budget is 'medium' (useDiaryStore.ts), so
+                // never fall back to 'low' when profile.budget is unset.
+                const isSelected = profile?.budget === level || (!profile?.budget && level === 'medium');
                 const labels = {
                   low: isRtl ? 'اقتصادية' : 'Low',
                   medium: isRtl ? 'متوسطة' : 'Medium',
@@ -755,7 +787,7 @@ export default function RecipesScreen() {
                     </View>
                     <View className="bg-[#D3B177]/20 px-2 py-1 rounded-full">
                       <Text className="text-[10px] font-inter-semibold text-[#A9894E]">
-                        {profile?.budget === 'low' || !profile?.budget ? '150 EGP / week' : profile?.budget === 'medium' ? '250 EGP / week' : '350 EGP / week'}
+                        {isRtl ? 'تكلفة' : 'Cost'}: {profile?.budget === 'low' ? '150 EGP / week' : profile?.budget === 'high' ? '350 EGP / week' : '250 EGP / week'}
                       </Text>
                     </View>
                   </View>

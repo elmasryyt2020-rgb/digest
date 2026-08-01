@@ -213,7 +213,11 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt }] }],
+          systemInstruction: {
+            role: 'system',
+            parts: [{ text: systemPrompt }],
+          },
+          contents: [{ parts: [{ text: 'Generate the meal plan JSON.' }] }],
         }),
       }
     );
@@ -231,7 +235,12 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
     try {
       parsedPlan = JSON.parse(cleaned);
     } catch (e) {
-      throw new Error(`Failed to parse meal plan: ${e.message}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`Failed to parse meal plan: ${msg}`);
+    }
+
+    if (!parsedPlan || !parsedPlan.meals) {
+      throw new Error('AI output is missing meals structure');
     }
 
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
@@ -404,7 +413,9 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
           total_protein_g: Math.round(total_protein_g * 10) / 10,
           total_carbs_g: Math.round(total_carbs_g * 10) / 10,
           total_fat_g: Math.round(total_fat_g * 10) / 10,
-          image_url: `https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80`,
+          image_url: meal.unsplash_query
+            ? `https://source.unsplash.com/featured/?${encodeURIComponent(meal.unsplash_query)}`
+            : `https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=600&q=80`,
           tags: Array.isArray(meal.tags) ? meal.tags.map(String) : ['AI Generated'],
           category: cat,
         };
@@ -432,7 +443,8 @@ Return a raw JSON payload matching this exact schema. Do not output markdown cod
     });
   } catch (err) {
     console.error(err);
-    return new Response(JSON.stringify({ error: err.message }), {
+    const msg = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: msg }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
     });
