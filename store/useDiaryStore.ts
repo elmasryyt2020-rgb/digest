@@ -727,9 +727,9 @@ export const useDiaryStore = create<DiaryState>()(
           console.error('Error syncing meal plan to Supabase:', err);
         }
 
-        // Upsert Generated Recipes
-        for (const recipe of updatedRecipes) {
-          await supabase.from('generated_recipes').upsert({
+        // Batch Upsert Generated Recipes
+        if (updatedRecipes.length > 0) {
+          const recipeRows = updatedRecipes.map((recipe) => ({
             id: recipe.id,
             user_id: userId,
             title_en: recipe.title_en,
@@ -745,29 +745,28 @@ export const useDiaryStore = create<DiaryState>()(
             total_fat_g: recipe.total_fat_g,
             image_url: recipe.image_url,
             country_origin: recipe.country_origin || 'EG',
-          });
+          }));
+          await supabase.from('generated_recipes').upsert(recipeRows);
         }
 
-        // Upsert Food Logs
-        for (const entry of updatedFoodLogs) {
-          const amount = entry.amount_g || 100;
-          const calories_per_100g = ((entry.calories || 0) / amount) * 100;
-          const protein_per_100g = ((entry.protein || 0) / amount) * 100;
-          const carbs_per_100g = ((entry.carbs || 0) / amount) * 100;
-          const fat_per_100g = ((entry.fat || 0) / amount) * 100;
-
-          await supabase.from('foods_cache').upsert({
-            id: entry.food_id,
-            name_en: entry.name_en,
-            name_ar: entry.name_ar,
-            calories_per_100g,
-            protein_per_100g,
-            carbs_per_100g,
-            fat_per_100g,
-            source: 'custom',
+        // Batch Upsert Food Logs & Foods Cache
+        if (updatedFoodLogs.length > 0) {
+          const cacheRows = updatedFoodLogs.map((entry) => {
+            const amount = entry.amount_g || 100;
+            return {
+              id: entry.food_id,
+              name_en: entry.name_en,
+              name_ar: entry.name_ar,
+              calories_per_100g: ((entry.calories || 0) / amount) * 100,
+              protein_per_100g: ((entry.protein || 0) / amount) * 100,
+              carbs_per_100g: ((entry.carbs || 0) / amount) * 100,
+              fat_per_100g: ((entry.fat || 0) / amount) * 100,
+              source: 'custom',
+            };
           });
+          await supabase.from('foods_cache').upsert(cacheRows);
 
-          await supabase.from('food_logs').upsert({
+          const foodLogRows = updatedFoodLogs.map((entry) => ({
             id: entry.id,
             user_id: userId,
             food_id: entry.food_id,
@@ -775,23 +774,25 @@ export const useDiaryStore = create<DiaryState>()(
             amount_g: entry.amount_g,
             logged_date: entry.logged_date,
             logged_at: entry.logged_at,
-          });
+          }));
+          await supabase.from('food_logs').upsert(foodLogRows);
         }
 
-        // Upsert Water Logs
-        for (const entry of updatedWaterLogs) {
-          await supabase.from('water_logs').upsert({
+        // Batch Upsert Water Logs
+        if (updatedWaterLogs.length > 0) {
+          const waterLogRows = updatedWaterLogs.map((entry) => ({
             id: entry.id,
             user_id: userId,
             amount_ml: entry.amount_ml,
             logged_date: entry.logged_date,
             logged_at: entry.logged_at,
-          });
+          }));
+          await supabase.from('water_logs').upsert(waterLogRows);
         }
 
-        // Upsert Workout Logs
-        for (const entry of updatedWorkoutLogs) {
-          await supabase.from('workout_logs').upsert({
+        // Batch Upsert Workout Logs
+        if (updatedWorkoutLogs.length > 0) {
+          const workoutLogRows = updatedWorkoutLogs.map((entry) => ({
             id: entry.id,
             user_id: userId,
             activity_name_en: entry.activity_name_en,
@@ -801,7 +802,8 @@ export const useDiaryStore = create<DiaryState>()(
             calories_burned: entry.calories_burned,
             logged_date: entry.logged_date,
             logged_at: entry.logged_at,
-          });
+          }));
+          await supabase.from('workout_logs').upsert(workoutLogRows);
         }
 
         set({ isTrial: false });

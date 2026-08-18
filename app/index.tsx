@@ -1,18 +1,19 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from 'nativewind';
-import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withDelay,
+  withSpring,
   Easing,
 } from 'react-native-reanimated';
 
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
+import { images } from '@/constants/images';
 
 export default function CustomSplashScreen() {
   const router = useRouter();
@@ -26,31 +27,39 @@ export default function CustomSplashScreen() {
   const logoScale = useSharedValue(0.4);
   const logoOpacity = useSharedValue(0);
   const textOpacity = useSharedValue(0);
+  const textTranslateY = useSharedValue(12);
 
   // Styling properties
   const bgColor = isDark ? '#101412' : '#F8F9F8';
-  const heartColor = isDark ? '#5C856C' : '#4C6E58';
 
   useEffect(() => {
-    // 1. Scale up and fade in the Heart Logo
-    logoScale.value = withTiming(1.0, {
-      duration: 800,
-      easing: Easing.out(Easing.back(1.5)),
+    // 1. Spring scale and fade in the official Logo
+    logoScale.value = withSpring(1.0, {
+      damping: 14,
+      stiffness: 100,
+      mass: 0.8,
     });
     logoOpacity.value = withTiming(1.0, {
-      duration: 650,
+      duration: 500,
     });
 
-    // 2. Fade in the "digest" text slightly later
+    // 2. Fade in and slide up the "digest" branding text
     textOpacity.value = withDelay(
-      400,
+      350,
       withTiming(1.0, {
-        duration: 500,
+        duration: 450,
+      })
+    );
+    textTranslateY.value = withDelay(
+      350,
+      withTiming(0, {
+        duration: 450,
+        easing: Easing.out(Easing.cubic),
       })
     );
 
-    // 3. Navigate only after authorization is initialized AND splash animation is complete (1.8s)
-    let navigationTimer: ReturnType<typeof setTimeout>;
+    // 3. Navigate once animation completes and auth is ready
+    let timer: ReturnType<typeof setTimeout>;
 
     const performRedirect = () => {
       if (profile?.onboarded && isSignedIn) {
@@ -61,18 +70,17 @@ export default function CustomSplashScreen() {
     };
 
     const checkAndRedirect = () => {
-      // If auth isn't initialized yet, wait and check again in 100ms
       if (!isInitialized) {
-        navigationTimer = setTimeout(checkAndRedirect, 100);
+        timer = setTimeout(checkAndRedirect, 100);
       } else {
         performRedirect();
       }
     };
 
-    // Initial delay of 1.8s for the splash entrance animation
-    navigationTimer = setTimeout(checkAndRedirect, 1800);
+    // Allow the entrance animation to play for 1.4s before smoothly transitioning
+    timer = setTimeout(checkAndRedirect, 1400);
 
-    return () => clearTimeout(navigationTimer);
+    return () => clearTimeout(timer);
   }, [isInitialized, profile?.onboarded, isSignedIn]);
 
   const logoAnimatedStyle = useAnimatedStyle(() => {
@@ -85,20 +93,26 @@ export default function CustomSplashScreen() {
   const textAnimatedStyle = useAnimatedStyle(() => {
     return {
       opacity: textOpacity.value,
+      transform: [{ translateY: textTranslateY.value }],
     };
   });
 
   return (
     <View style={[styles.container, { backgroundColor: bgColor }]}>
-      {/* Ambient background glow matching Welcome screen style but subtle */}
+      {/* Ambient background glow spots matching Welcome screen aesthetic */}
       <View style={[styles.glowSage, { backgroundColor: isDark ? '#1F2E25' : '#E2ECD7' }]} />
+      <View style={[styles.glowPeach, { backgroundColor: isDark ? '#E58C73' : '#E58C73', opacity: isDark ? 0.04 : 0.08 }]} />
 
       <View className="items-center justify-center z-10">
         <Animated.View style={[styles.logoWrapper, logoAnimatedStyle]}>
-          <Ionicons name="heart" size={90} color={heartColor} />
+          <Image
+            source={images.splashIcon}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </Animated.View>
         <Animated.View style={textAnimatedStyle}>
-          <Text className="font-outfit-bold text-4xl text-text-primary mt-5 tracking-wider">
+          <Text className="font-outfit-bold text-4xl text-text-primary mt-4 tracking-wider">
             digest
           </Text>
         </Animated.View>
@@ -117,14 +131,40 @@ const styles = StyleSheet.create({
   logoWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
+    width: 110,
+    height: 110,
+  },
+  logoImage: {
+    width: 100,
+    height: 100,
   },
   glowSage: {
     position: 'absolute',
-    top: '30%',
-    left: '10%',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    opacity: 0.1,
+    top: '32%',
+    left: '12%',
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    opacity: 0.14,
+    ...Platform.select({
+      web: {
+        filter: 'blur(60px)',
+      } as any,
+    }),
+  },
+  glowPeach: {
+    position: 'absolute',
+    top: '40%',
+    right: '10%',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    ...Platform.select({
+      web: {
+        filter: 'blur(60px)',
+      } as any,
+    }),
   },
 });
+
+

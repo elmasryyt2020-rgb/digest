@@ -53,6 +53,7 @@ export default function RootLayout() {
 
   const initializeDefaultProfile = useDiaryStore((state) => state.initializeDefaultProfile);
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
+  const isAuthInitialized = useAuthStore((state) => state.isInitialized);
   const profile = useDiaryStore((state) => state.profile);
 
   const { colorScheme, setColorScheme } = useColorScheme();
@@ -63,11 +64,14 @@ export default function RootLayout() {
   }, [error]);
 
   useEffect(() => {
+    // Initialize default user statistics and Supabase auth on mount
+    initializeDefaultProfile();
+    initializeAuth();
+  }, [initializeDefaultProfile, initializeAuth]);
+
+  useEffect(() => {
     if (loaded) {
-      // Initialize default user statistics and Supabase auth on mount
-      initializeDefaultProfile();
-      initializeAuth();
-      SplashScreen.hideAsync();
+      SplashScreen.hideAsync().catch(() => {});
     }
   }, [loaded]);
 

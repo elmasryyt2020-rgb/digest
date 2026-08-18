@@ -15,6 +15,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+async function callGemini(geminiKey: string, payload: any): Promise<any> {
+  const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastError = '';
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (res.ok) {
+        return await res.json();
+      }
+      const errText = await res.text();
+      lastError = `${model}: ${res.status} - ${errText}`;
+      console.warn(`Gemini model ${model} failed, trying fallback...`, lastError);
+    } catch (e: any) {
+      lastError = `${model}: ${e.message}`;
+    }
+  }
+  throw new Error(`All Gemini models failed. Last error: ${lastError}`);
+}
+
 interface FoodsCache {
   calories_per_100g: number;
   protein_per_100g: number;
@@ -222,19 +248,11 @@ serve(async (req) => {
       try {
         const prompt = `You are a professional nutritionist. Write a personal, friendly coaching summary in ${isAr ? 'Arabic' : 'English'} for ${clientName} based on their weekly metrics.\nDaily Target Calories: ${targetCal} kcal, Average intake: ${avgCal} kcal.\nTarget Macros: Protein ${targetProtein}g, Carbs ${targetCarbs}g, Fats ${targetFat}g.\nAverage Actual Macros: Protein ${avgProtein}g, Carbs ${avgCarbs}g, Fats ${avgFat}g.\nTarget Daily Water: ${targetWater}ml, Average actual water: ${avgWater}ml.\nWorkouts: completed ${totalWorkoutsCount} workouts this week, burning ${totalCaloriesBurned} total calories.\nHealth Goal: ${healthGoal}.\nKeep the summary to exactly 2-3 sentences. Focus on positive reinforcement or 1 actionable adjustment (e.g. eating more protein/water, adjusting calories).\nProvide ONLY the response without any formatting, markdown, or preambles.`;
 
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-          }
-        );
-        if (geminiRes.ok) {
-          const geminiData = await geminiRes.json();
-          const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-          if (responseText) aiInsight = responseText;
-        }
+        const geminiData = await callGemini(geminiKey, {
+          contents: [{ parts: [{ text: prompt }] }],
+        });
+        const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (responseText) aiInsight = responseText;
       } catch (err) {
         console.error('Error generating AI Insights:', err);
       }

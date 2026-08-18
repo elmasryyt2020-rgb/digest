@@ -77,6 +77,32 @@ async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
+async function callGemini(geminiKey: string, payload: any): Promise<any> {
+  const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastError = '';
+  for (const model of models) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (res.ok) {
+        return await res.json();
+      }
+      const errText = await res.text();
+      lastError = `${model}: ${res.status} - ${errText}`;
+      console.warn(`Gemini model ${model} failed, trying fallback...`, lastError);
+    } catch (e: any) {
+      lastError = `${model}: ${e.message}`;
+    }
+  }
+  throw new Error(`All Gemini models failed. Last error: ${lastError}`);
+}
+
 /** Normalize a food name for cache matching (lowercase, trimmed, collapse spaces). */
 function normalizeName(name: string): string {
   return name.toLowerCase().trim().replace(/\s+/g, ' ');
@@ -165,28 +191,15 @@ serve(async (req) => {
     const mimeType = blob.type || 'image/jpeg';
 
     // 4. Call Gemini vision with the system prompt + inline image payload.
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: VISION_PROMPT },
-              { inlineData: { mimeType, data: base64 } },
-            ],
-          }],
-        }),
-      }
-    );
+    const geminiData = await callGemini(geminiKey, {
+      contents: [{
+        parts: [
+          { text: VISION_PROMPT },
+          { inlineData: { mimeType, data: base64 } },
+        ],
+      }],
+    });
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      throw new Error(`Gemini API error: ${geminiResponse.status} - ${errorText}`);
-    }
-
-    const geminiData = await geminiResponse.json();
     const rawText: string = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     const cleaned = stripFences(rawText);
 

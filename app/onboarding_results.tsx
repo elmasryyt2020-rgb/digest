@@ -366,7 +366,6 @@ export default function OnboardingResultsScreen() {
 
 const styles = StyleSheet.create({
   frostedOverlay: {
-    backgroundColor: 'rgba(248, 249, 248, 0.9)',
-    backdropFilter: 'blur(4px)',
-  } as any,
+    backgroundColor: 'rgba(248, 249, 248, 0.95)',
+  },
 });

@@ -349,7 +349,7 @@ export default function RecipesScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       {/* Header */}
       <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
         <View className="w-16" />
@@ -787,7 +787,18 @@ export default function RecipesScreen() {
                     </View>
                     <View className="bg-[#D3B177]/20 px-2 py-1 rounded-full">
                       <Text className="text-[10px] font-inter-semibold text-[#A9894E]">
-                        {isRtl ? 'تكلفة' : 'Cost'}: {profile?.budget === 'low' ? '150 EGP / week' : profile?.budget === 'high' ? '350 EGP / week' : '250 EGP / week'}
+                        {isRtl ? 'التكلفة التقديرية: ' : 'Est. Cost: '}
+                        {profile?.country === 'GB'
+                          ? profile?.budget === 'low'
+                            ? '£15 / wk'
+                            : profile?.budget === 'high'
+                            ? '£35 / wk'
+                            : '£25 / wk'
+                          : profile?.budget === 'low'
+                          ? (isRtl ? '١٥٠ ج.م / أسبوع' : '150 EGP / wk')
+                          : profile?.budget === 'high'
+                          ? (isRtl ? '٣٥٠ ج.م / أسبوع' : '350 EGP / wk')
+                          : (isRtl ? '٢٥٠ ج.م / أسبوع' : '250 EGP / wk')}
                       </Text>
                     </View>
                   </View>

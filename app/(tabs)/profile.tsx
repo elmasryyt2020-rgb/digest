@@ -24,6 +24,7 @@ import { PresstoButton } from '@/components/PresstoButton';
 import { faqCategories } from '@/data/faqData';
 import { privacySections } from '@/data/privacyData';
 import { termsSections } from '@/data/termsData';
+import { parseLocalizedFloat, parseLocalizedInt } from '@/lib/formatters';
 import {
   requestNotificationPermission,
   scheduleMealReminders,
@@ -564,7 +565,7 @@ export default function ProfileScreen() {
   const filteredFaqs = getFilteredFAQs();
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       {/* Header */}
       <View className={`flex-row justify-between items-center px-5 py-4 bg-bg-card border-b border-border-muted ${isRtl ? 'flex-row-reverse' : ''}`}>
         <View className="w-10" />
@@ -736,7 +737,10 @@ export default function ProfileScreen() {
                   value={ageText}
                   onChangeText={(text) => {
                     setAgeText(text);
-                    handleStatChange('age', parseInt(text) || 0);
+                    const parsedAge = parseLocalizedInt(text, 0);
+                    if (parsedAge >= 10 && parsedAge <= 120) {
+                      handleStatChange('age', parsedAge);
+                    }
                   }}
                 />
               </View>
@@ -752,11 +756,13 @@ export default function ProfileScreen() {
                   value={weightText}
                   onChangeText={(text) => {
                     setWeightText(text);
-                    const val = parseFloat(text) || 0;
-                    if (profile?.unit_weight === 'lbs') {
-                      handleStatChange('weight_kg', Math.round((val / 2.20462) * 10) / 10);
-                    } else {
-                      handleStatChange('weight_kg', val);
+                    const val = parseLocalizedFloat(text, 0);
+                    if (val >= 20 && val <= 500) {
+                      if (profile?.unit_weight === 'lbs') {
+                        handleStatChange('weight_kg', Math.round((val / 2.20462) * 10) / 10);
+                      } else {
+                        handleStatChange('weight_kg', val);
+                      }
                     }
                   }}
                 />
@@ -773,11 +779,13 @@ export default function ProfileScreen() {
                   value={goalWeightText}
                   onChangeText={(text) => {
                     setGoalWeightText(text);
-                    const val = parseFloat(text) || 0;
-                    if (profile?.unit_weight === 'lbs') {
-                      handleStatChange('goal_weight_kg', Math.round((val / 2.20462) * 10) / 10);
-                    } else {
-                      handleStatChange('goal_weight_kg', val);
+                    const val = parseLocalizedFloat(text, 0);
+                    if (val >= 20 && val <= 500) {
+                      if (profile?.unit_weight === 'lbs') {
+                        handleStatChange('goal_weight_kg', Math.round((val / 2.20462) * 10) / 10);
+                      } else {
+                        handleStatChange('goal_weight_kg', val);
+                      }
                     }
                   }}
                 />
@@ -798,10 +806,12 @@ export default function ProfileScreen() {
                         placeholder={t.feet}
                         onChangeText={(text) => {
                           setHeightFt(text);
-                          const ft = parseFloat(text) || 0;
-                          const inch = parseFloat(heightIn) || 0;
+                          const ft = parseLocalizedFloat(text, 0);
+                          const inch = parseLocalizedFloat(heightIn, 0);
                           const cm = ftInToCm(ft, inch);
-                          handleStatChange('height_cm', cm);
+                          if (cm >= 50 && cm <= 300) {
+                            handleStatChange('height_cm', cm);
+                          }
                         }}
                       />
                       <Text className="text-[9px] text-text-muted text-center mt-1">{t.feet}</Text>
@@ -814,10 +824,12 @@ export default function ProfileScreen() {
                         placeholder={t.inches}
                         onChangeText={(text) => {
                           setHeightIn(text);
-                          const ft = parseFloat(heightFt) || 0;
-                          const inch = parseFloat(text) || 0;
+                          const ft = parseLocalizedFloat(heightFt, 0);
+                          const inch = parseLocalizedFloat(text, 0);
                           const cm = ftInToCm(ft, inch);
-                          handleStatChange('height_cm', cm);
+                          if (cm >= 50 && cm <= 300) {
+                            handleStatChange('height_cm', cm);
+                          }
                         }}
                       />
                       <Text className="text-[9px] text-text-muted text-center mt-1">{t.inches}</Text>
@@ -830,7 +842,10 @@ export default function ProfileScreen() {
                     value={heightCm}
                     onChangeText={(text) => {
                       setHeightCm(text);
-                      handleStatChange('height_cm', parseFloat(text) || 0);
+                      const parsedCm = parseLocalizedFloat(text, 0);
+                      if (parsedCm >= 50 && parsedCm <= 300) {
+                        handleStatChange('height_cm', parsedCm);
+                      }
                     }}
                   />
                 )}

@@ -415,14 +415,23 @@ Use Supabase Authentication (standard email/password sign-in/sign-up) for user m
 
 Do not build custom auth logic. Banish Clerk authentication.
 
-### Sign-Up and Activation Flow:
-- Collect First Name, Last Name, Email Address, and Password.
-- Capitalize names before saving them.
-- Require users to verify their email address by entering a One-Time Password (OTP) code sent via email before activating the session and allowing diary additions.
+### Current Sign-Up and Activation Flow (Auto-Confirm Active):
+- The self-hosted GoTrue container on the VPS has automatic email confirmation enabled (`ENABLE_EMAIL_AUTOCONFIRM=true`, `GOTRUE_MAILER_AUTOCONFIRM=true`).
+- When a user signs up (`app/sign-up.tsx` or `components/SupabaseSignUpModal.tsx`), names are capitalized, and `supabase.auth.signUp()` immediately returns a confirmed user and active JWT session without requiring email delivery.
+- The app immediately sets `onboarded: true`, syncs initial diary state to Supabase, and navigates straight to `/(tabs)`. The OTP verification screen is bypassed during this phase.
 
-### Forgot Password Flow:
-- Send a verification OTP reset code to the user's email address.
-- Require OTP code verification to authenticate identity before allowing password updates.
+### Future Flow (When SMTP & Email Sending Are Enabled):
+When a production SMTP provider (e.g. Resend, SendGrid, Amazon SES) is attached to the VPS GoTrue service:
+1. **Server Configuration**: Update `/home/seif/supabase-docker/docker-compose.yml` or `.env` on the VPS to set:
+   - `ENABLE_EMAIL_AUTOCONFIRM=false`
+   - `GOTRUE_MAILER_AUTOCONFIRM=false`
+   - Configure `GOTRUE_SMTP_*` credentials.
+2. **Client Sign-Up Flow**:
+   - Re-enable the 6-digit OTP verification screen in `app/sign-up.tsx` (`setIsVerifyingOtp(true)`) and `components/SupabaseSignUpModal.tsx` (`setMode('verify')`).
+   - Require users to verify their email address by submitting the OTP code via `supabase.auth.verifyOtp({ email, token, type: 'signup' })` before activating the session and allowing diary additions.
+3. **Forgot Password Flow**:
+   - Send a verification OTP reset code to the user's email address via `supabase.auth.resetPasswordForEmail(email)`.
+   - Require OTP code verification (`supabase.auth.verifyOtp({ email, token, type: 'recovery' })`) to authenticate identity before allowing password updates with `supabase.auth.updateUser({ password })`.
 
 ---
 

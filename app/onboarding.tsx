@@ -19,6 +19,8 @@ import * as Localization from 'expo-localization';
 
 import { useDiaryStore, calculateNutrientTargets } from '@/store/useDiaryStore';
 import { PresstoButton } from '@/components/PresstoButton';
+import { parseLocalizedFloat, parseLocalizedInt } from '@/lib/formatters';
+import { Alert } from 'react-native';
 
 // OnboardShell component that houses progressive step dots and next button
 interface OnboardShellProps {
@@ -180,9 +182,10 @@ export default function OnboardingScreen() {
         const detectedCountry = (regionCode === 'EG' || regionCode === 'GB' ? regionCode : 'EG') as 'EG' | 'GB';
 
         const currentYear = new Date().getFullYear();
-        const ageVal = currentYear - (parseInt(birthYear) || 28);
-        const weightVal = parseFloat(weight) || 75;
-        const heightVal = parseFloat(height) || 175;
+        const birthYearNum = parseLocalizedInt(birthYear, 1996);
+        const ageVal = Math.max(10, Math.min(120, currentYear - birthYearNum));
+        const weightVal = parseLocalizedFloat(weight, 75);
+        const heightVal = parseLocalizedFloat(height, 175);
 
         const baseProfile = {
           name: 'Guest',
@@ -220,7 +223,14 @@ export default function OnboardingScreen() {
           });
 
           if (error || !data) {
-            throw new Error(error?.message || 'Failed to generate meal plan');
+            let errorMsg = error?.message || 'Failed to generate meal plan';
+            try {
+              if (error && (error as any).context) {
+                const errBody = await (error as any).context.json();
+                if (errBody?.error) errorMsg = errBody.error;
+              }
+            } catch {}
+            throw new Error(errorMsg);
           }
 
           if (isMounted) {
@@ -283,18 +293,24 @@ export default function OnboardingScreen() {
 
   // Steps Navigation
   const handleStep0Next = () => {
-    const hVal = parseFloat(height);
-    const wVal = parseFloat(weight);
-    const yVal = parseInt(birthYear);
+    const hVal = parseLocalizedFloat(height, 0);
+    const wVal = parseLocalizedFloat(weight, 0);
+    const yVal = parseLocalizedInt(birthYear, 0);
     const currentYear = new Date().getFullYear();
 
-    if (
-      hVal >= 100 && hVal <= 250 &&
-      wVal >= 30 && wVal <= 300 &&
-      yVal >= 1900 && yVal <= currentYear
-    ) {
-      setStep(1);
+    if (!birthYear.trim() || yVal < 1920 || yVal > currentYear - 10) {
+      Alert.alert('Invalid Year of Birth', 'Please enter a valid birth year (e.g. 1995).');
+      return;
     }
+    if (!weight.trim() || wVal < 30 || wVal > 300) {
+      Alert.alert('Invalid Weight', 'Please enter a valid weight in kg (e.g. 75).');
+      return;
+    }
+    if (!height.trim() || hVal < 100 || hVal > 250) {
+      Alert.alert('Invalid Height', 'Please enter a valid height in cm (e.g. 175).');
+      return;
+    }
+    setStep(1);
   };
 
   const handleStep1Next = () => {

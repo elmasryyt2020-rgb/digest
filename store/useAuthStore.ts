@@ -99,7 +99,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const capLastName = lastName.trim().charAt(0).toUpperCase() + lastName.trim().slice(1).toLowerCase();
       const display_name = `${capFirstName} ${capLastName}`;
 
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -112,6 +112,29 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
 
       if (error) throw error;
+
+      // When auto-confirm is enabled on the server (GoTrue ENABLE_EMAIL_AUTOCONFIRM=true),
+      // data.session is immediately returned.
+      if (data?.session && data?.user) {
+        const user = {
+          id: data.user.id,
+          email: data.user.email || '',
+          name: data.user.user_metadata?.display_name || display_name,
+        };
+        set({ user, isSignedIn: true, isLoading: false });
+
+        // Update profile in store
+        useDiaryStore.getState().setProfile({
+          email: user.email,
+          name: user.name,
+          onboarded: true,
+        });
+
+        // Sync local logs to Supabase
+        await useDiaryStore.getState().syncToSupabase(data.user.id);
+        return true;
+      }
+
       set({ isLoading: false });
       return true;
     } catch (err) {

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { useDiaryStore } from '@/store/useDiaryStore';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -11,6 +12,7 @@ export default function TabLayout() {
   const isDark = colorScheme === 'dark';
   const language = useDiaryStore((state) => state.profile?.language) || 'ar';
   const isRtl = language === 'ar';
+  const insets = useSafeAreaInsets();
 
   const isSignedIn = useAuthStore((state) => state.isSignedIn);
   const isInitialized = useAuthStore((state) => state.isInitialized);
@@ -22,6 +24,10 @@ export default function TabLayout() {
     }
   }, [isSignedIn, isInitialized]);
 
+  const bottomInset = insets.bottom;
+  const tabHeight = 60 + bottomInset;
+  const paddingBottom = bottomInset > 0 ? bottomInset : 8;
+
   return (
     <Tabs
       screenOptions={{
@@ -30,10 +36,12 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: isDark ? '#161B18' : '#FFFFFF',
-          borderTopWidth: 1,
-          borderTopColor: isDark ? '#242C28' : '#EAECEB',
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          borderTopWidth: 0,
+          borderTopColor: 'transparent',
+          elevation: 0,
+          shadowOpacity: 0,
+          height: tabHeight,
+          paddingBottom: paddingBottom,
           paddingTop: 8,
         },
         tabBarLabelStyle: {

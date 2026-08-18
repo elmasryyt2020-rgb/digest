@@ -20,6 +20,10 @@ type ModalMode = 'signin' | 'signup' | 'verify' | 'forgot' | 'reset';
 export function SupabaseSignUpModal() {
   const isOpen = useDiaryStore((state) => state.isSignUpModalOpen);
   const setOpen = useDiaryStore((state) => state.setSignUpModalOpen);
+  const language = useDiaryStore((state) => state.profile?.language) || 'ar';
+  const isRtl = language === 'ar';
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
   
   const signUp = useAuthStore((state) => state.signUp);
   const signIn = useAuthStore((state) => state.signIn);
@@ -79,8 +83,7 @@ export function SupabaseSignUpModal() {
     try {
       const success = await signUp(email.trim(), password.trim(), firstName.trim(), lastName.trim());
       if (success) {
-        setInfo(isRtl ? 'تم إرسال رمز التحقق إلى بريدك الإلكتروني.' : 'Verification code sent to your email.');
-        setMode('verify');
+        handleClose();
       } else {
         setError(isRtl ? 'فشل إنشاء الحساب.' : 'Sign up failed.');
       }
@@ -146,11 +149,6 @@ export function SupabaseSignUpModal() {
       setError(e.message || 'An error occurred.');
     }
   };
-
-  const language = useDiaryStore((state) => state.profile?.language) || 'ar';
-  const isRtl = language === 'ar';
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === 'dark';
 
   return (
     <Modal

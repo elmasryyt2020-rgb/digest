@@ -118,7 +118,7 @@ export default function RecipeDetailScreen() {
 
   if (!recipe) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }} className="justify-center items-center p-6">
+      <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
         <Ionicons name="alert-circle-outline" size={48} color="#E58C73" />
         <Text className="font-outfit-bold text-lg text-text-primary mt-4">
           {isRtl ? 'الوصفة غير موجودة' : 'Recipe not found'}

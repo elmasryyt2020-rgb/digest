@@ -53,8 +53,8 @@ export default function SignUpScreen() {
     try {
       const success = await signUp(email.trim(), password.trim(), firstName.trim(), lastName.trim());
       if (success) {
-        setInfo('A 6-digit verification code has been sent to your email.');
-        setIsVerifyingOtp(true);
+        setProfile({ onboarded: true });
+        router.replace('/(tabs)');
       } else {
         setError('Sign up failed. Please try again.');
       }

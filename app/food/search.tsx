@@ -32,6 +32,7 @@ import { useDiaryStore } from '@/store/useDiaryStore';
 import { PresstoButton } from '@/components/PresstoButton';
 import { supabase } from '@/lib/supabase';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { parseLocalizedInt, normalizeArabicDigits } from '@/lib/formatters';
 
 interface FoodItem {
   id: string;
@@ -1311,7 +1312,7 @@ export default function FoodSearchScreen() {
                       <Text className="text-text-primary font-outfit-bold text-xs">{isRtl ? 'طلب الإذن' : 'Request Access'}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      onPress={() => handleBarcodeDetected(manualBarcode)}
+                      onPress={() => handleBarcodeDetected(normalizeArabicDigits(manualBarcode))}
                       className="flex-1 bg-accent-sage py-2.5 rounded-xl justify-center items-center"
                       disabled={!manualBarcode.trim()}
                     >
@@ -1635,9 +1636,9 @@ export default function FoodSearchScreen() {
                                       keyboardType="numeric"
                                       value={String(item.amount_g)}
                                       onChangeText={(text) => {
-                                        const parsed = parseInt(text.replace(/[^0-9]/g, ''), 10);
+                                        const parsed = parseLocalizedInt(text, 0);
                                         setScannedIngredients(prev => prev.map(ing => 
-                                          ing.id === item.id ? { ...ing, amount_g: isNaN(parsed) ? 0 : Math.min(1000, parsed) } : ing
+                                          ing.id === item.id ? { ...ing, amount_g: Math.min(1000, Math.max(0, parsed)) } : ing
                                         ));
                                       }}
                                       style={{

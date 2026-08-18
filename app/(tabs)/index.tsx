@@ -10,6 +10,7 @@ import { activities, ActivityType } from '@/data/activities';
 import { ProgressRing } from '@/components/ProgressRing';
 import { WaterBottle } from '@/components/WaterBottle';
 import { PresstoButton } from '@/components/PresstoButton';
+import { parseLocalizedFloat } from '@/lib/formatters';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -90,10 +91,18 @@ export default function DashboardScreen() {
   const netCalories = Math.max(0, eatenCalories - burnedCalories);
   const targetCalories = profile?.target_calories || 2000;
   
-  // Weekly Aggregates
-  const weeklyAvgCalories = Math.round((foodLogs.reduce((sum, log) => sum + log.calories, 0) + eatenCalories) / 2 || eatenCalories);
-  const weeklyAvgWater = Math.round((waterLogs.reduce((sum, log) => sum + log.amount_ml, 0) + totalWater) / 2 || totalWater);
-  const weeklyAvgBurned = Math.round((workoutLogs.reduce((sum, log) => sum + log.calories_burned, 0) + burnedCalories) / 2 || burnedCalories);
+  // Weekly Aggregates (Past 7 Days Rolling Window)
+  const sevenDaysAgoDate = new Date();
+  sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 6);
+  const sevenDaysAgoStr = sevenDaysAgoDate.toISOString().split('T')[0];
+
+  const pastWeekFoodLogs = foodLogs.filter(log => log.logged_date >= sevenDaysAgoStr);
+  const pastWeekWaterLogs = waterLogs.filter(log => log.logged_date >= sevenDaysAgoStr);
+  const pastWeekWorkoutLogs = workoutLogs.filter(log => log.logged_date >= sevenDaysAgoStr);
+
+  const weeklyAvgCalories = Math.round(pastWeekFoodLogs.reduce((sum, log) => sum + log.calories, 0) / 7);
+  const weeklyAvgWater = Math.round(pastWeekWaterLogs.reduce((sum, log) => sum + log.amount_ml, 0) / 7);
+  const weeklyAvgBurned = Math.round(pastWeekWorkoutLogs.reduce((sum, log) => sum + log.calories_burned, 0) / 7);
 
   // Group food logs by meal type
   const getLogsByMealType = (type: 'breakfast' | 'lunch' | 'dinner' | 'snacks') => {
@@ -105,7 +114,7 @@ export default function DashboardScreen() {
   };
 
   const handleWorkoutSubmit = () => {
-    const mins = parseFloat(duration) || 0;
+    const mins = parseLocalizedFloat(duration, 0);
     if (mins <= 0) return;
 
     addWorkoutLog({
@@ -128,7 +137,7 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: isDark ? '#101412' : '#F8F9F8' }}>
       <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
         
         {/* Header Section */}
